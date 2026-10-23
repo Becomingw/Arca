@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use aether_data_contracts::repository::global_models::StoredPublicGlobalModel;
 use axum::{
     body::Body,
@@ -8,13 +10,14 @@ use axum::{
 use serde_json::{json, Map, Value};
 
 use super::{
-    models_route::{await_models_route_read, list_model_rows_for_query_formats},
+    models_route::{await_models_route_read, list_provider_model_rows_for_query_formats},
     models_shared::models_query_api_formats,
     AppState,
 };
 
 const API_FORMAT: &str = "openai:chat";
 const MAX_MODELS: usize = 512;
+const MAX_PROVIDER_MODEL_MAPPINGS: usize = 4096;
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 pub(super) fn unavailable_response() -> Response<Body> {
@@ -66,22 +69,30 @@ pub(super) async fn build_response(
                 )
             })
             .collect::<Vec<_>>();
-        let Some(rows) = list_model_rows_for_query_formats(state, &query_formats, Some(auth)).await
+        let Some(rows) =
+            list_provider_model_rows_for_query_formats(state, &query_formats, Some(auth)).await
         else {
             return Ok(None);
         };
-        if rows.len() > MAX_MODELS {
+        if rows.len() > MAX_PROVIDER_MODEL_MAPPINGS {
+            return Ok(None);
+        }
+        let mut grouped = BTreeMap::<String, Vec<_>>::new();
+        for row in rows {
+            grouped
+                .entry(row.global_model_name.clone())
+                .or_default()
+                .push(row);
+        }
+        if grouped.len() > MAX_MODELS {
             return Ok(None);
         }
         let mut models = Map::new();
-        for row in rows {
-            if contains_dynamic_reference(&row.global_model_name) {
+        for (alias, rows) in grouped {
+            if contains_dynamic_reference(&alias) {
                 continue;
             }
-            let model = state
-                .data
-                .get_public_global_model_by_name(&row.global_model_name)
-                .await?;
+            let model = state.data.get_public_global_model_by_name(&alias).await?;
             // An installed public reader returns only active models. A missing
             // record can mean disable/delete since the candidate snapshot.
             if state.has_global_model_data_reader() && model.is_none() {
@@ -96,10 +107,52 @@ pub(super) async fn build_response(
             }) {
                 continue;
             }
-            models.insert(
-                row.global_model_name.clone(),
-                project_model(&row.global_model_name, model.as_ref()),
-            );
+            let Some(global_model_id) = model
+                .as_ref()
+                .map(|model| model.id.as_str())
+                .or_else(|| rows.first().map(|row| row.global_model_id.as_str()))
+            else {
+                continue;
+            };
+            // One read per alias, rather than a serial query for every provider/key.
+            // Only authorized candidate mappings below contribute to public limits.
+            let mappings = state
+                .data
+                .list_admin_provider_models_by_global_model_id(global_model_id)
+                .await?
+                .into_iter()
+                .filter(|mapping| mapping.global_model_id == global_model_id)
+                .map(|mapping| ((mapping.provider_id.clone(), mapping.id.clone()), mapping))
+                .collect::<BTreeMap<_, _>>();
+            let mut limits = Vec::new();
+            for row in &rows {
+                if row.global_model_id != global_model_id {
+                    continue;
+                }
+                let mapping = mappings.get(&(row.provider_id.clone(), row.model_id.clone()));
+                if mapping.is_some_and(|mapping| !mapping.is_active || !mapping.is_available) {
+                    continue;
+                }
+                // A missing mapping is not evidence that there is no override.
+                // Keep the alias, but omit advertised limits instead of overpromising.
+                limits.push(mapping.and_then(|mapping| {
+                    effective_token_limits(
+                        model.as_ref().and_then(|model| model.config.as_ref()),
+                        mapping.config.as_ref(),
+                    )
+                }));
+            }
+            if limits.is_empty() {
+                continue;
+            }
+            let mut card = project_model(&alias, model.as_ref());
+            card.as_object_mut()
+                .expect("model card is an object")
+                .remove("limit");
+            if let Some((context, output)) = conservative_token_limits(&limits) {
+                card["limit"] = json!({"context": context, "output": output});
+            }
+            models.insert(alias, card);
         }
         let payload = config(models, base_url);
         Ok::<_, aether_data_contracts::DataLayerError>(
@@ -128,6 +181,34 @@ fn positive_token_limit(value: &Value) -> Option<u64> {
     value
         .as_u64()
         .filter(|number| *number > 0 && *number <= 9_007_199_254_740_991)
+}
+
+// Only absent fields inherit. An explicit invalid override is unknown, not a
+// reason to advertise the potentially larger global value.
+fn effective_token_limits(global: Option<&Value>, mapping: Option<&Value>) -> Option<(u64, u64)> {
+    let field = |name: &str| {
+        mapping
+            .and_then(|value| value.get(name))
+            .or_else(|| global.and_then(|value| value.get(name)))
+            .and_then(positive_token_limit)
+    };
+    let context = field("context_limit")?;
+    let output = field("output_limit")?;
+    (output <= context).then_some((context, output))
+}
+
+fn conservative_token_limits(limits: &[Option<(u64, u64)>]) -> Option<(u64, u64)> {
+    let mut result: Option<(u64, u64)> = None;
+    for limit in limits {
+        let (context, output) = (*limit)?;
+        result = Some(match result {
+            Some((prior_context, prior_output)) => {
+                (context.min(prior_context), output.min(prior_output))
+            }
+            None => (context, output),
+        });
+    }
+    result
 }
 
 fn contains_dynamic_reference(value: &str) -> bool {

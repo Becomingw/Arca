@@ -102,3 +102,70 @@ fn opencode_rejects_local_dynamic_references() {
         json!({"baseURL": "https://gateway.example/v1"})
     );
 }
+
+#[test]
+fn opencode_provider_limits_override_fields_and_inherit_missing_fields() {
+    let global = json!({"context_limit": 200000, "output_limit": 16000});
+    assert_eq!(
+        effective_token_limits(Some(&global), None),
+        Some((200000, 16000))
+    );
+    assert_eq!(
+        effective_token_limits(Some(&global), Some(&json!({"context_limit": 64000}))),
+        Some((64000, 16000))
+    );
+    assert_eq!(
+        effective_token_limits(Some(&global), Some(&json!({"output_limit": 4000}))),
+        Some((200000, 4000))
+    );
+    assert_eq!(
+        effective_token_limits(
+            None,
+            Some(&json!({"context_limit": 64000, "output_limit": 4000}))
+        ),
+        Some((64000, 4000))
+    );
+}
+
+#[test]
+fn opencode_provider_limits_take_minimum_without_guessing_unknowns() {
+    assert_eq!(
+        conservative_token_limits(&[
+            Some((200000, 16000)),
+            Some((64000, 8000)),
+            Some((100000, 4000))
+        ]),
+        Some((64000, 4000))
+    );
+    assert_eq!(
+        conservative_token_limits(&[Some((64000, 4000)), None]),
+        None
+    );
+    assert_eq!(conservative_token_limits(&[]), None);
+}
+
+#[test]
+fn opencode_provider_invalid_overrides_do_not_fall_back_to_larger_global_limit() {
+    let global = json!({"context_limit": 200000, "output_limit": 16000});
+    for invalid in [
+        json!(null),
+        json!(0),
+        json!(-1),
+        json!(1.5),
+        json!("64000"),
+        json!(9_007_199_254_740_992_u64),
+    ] {
+        assert_eq!(
+            effective_token_limits(Some(&global), Some(&json!({"context_limit": invalid}))),
+            None
+        );
+    }
+    assert_eq!(
+        effective_token_limits(Some(&global), Some(&json!({"context_limit": 1000}))),
+        None
+    );
+    assert_eq!(
+        effective_token_limits(Some(&json!({"context_limit": 64000})), None),
+        None
+    );
+}

@@ -7,6 +7,39 @@ use crate::data::GatewayDataState;
 use crate::tests::{build_router_with_state, json, start_server, AppState, Arc, StatusCode};
 use aether_data_contracts::repository::auth::AuthApiKeyWriteRepository;
 use aether_data_contracts::repository::candidate_selection::StoredProviderModelMapping;
+use aether_data_contracts::repository::global_models::StoredAdminProviderModel;
+
+fn provider_limit_metadata(
+    provider_id: &str,
+    alias: &str,
+    config: Option<serde_json::Value>,
+) -> StoredAdminProviderModel {
+    StoredAdminProviderModel {
+        id: format!("model-{provider_id}-{alias}"),
+        provider_id: provider_id.into(),
+        global_model_id: format!("global-{alias}"),
+        provider_model_name: "private-upstream-name".into(),
+        provider_model_mappings: None,
+        price_per_request: None,
+        tiered_pricing: None,
+        supports_vision: None,
+        supports_function_calling: None,
+        supports_streaming: None,
+        supports_extended_thinking: None,
+        supports_image_generation: None,
+        is_active: true,
+        is_available: true,
+        config,
+        created_at_unix_ms: None,
+        updated_at_unix_secs: None,
+        global_model_name: Some(alias.into()),
+        global_model_display_name: None,
+        global_model_default_price_per_request: None,
+        global_model_default_tiered_pricing: None,
+        global_model_supported_capabilities: None,
+        global_model_config: None,
+    }
+}
 
 #[test]
 fn gateway_opencode_conversation_sources_obey_client_chat_and_effective_model_permissions() {
@@ -229,16 +262,21 @@ fn gateway_opencode_catalog_uses_selected_api_key_and_safe_public_metadata() {
         second_metadata.supported_capabilities = None;
         let data =
             GatewayDataState::with_minimal_candidate_selection_and_auth_for_tests(candidates, auth)
-                .with_global_model_reader(Arc::new(InMemoryGlobalModelReadRepository::seed(vec![
-                    metadata,
-                    second_metadata,
-                    sample_public_global_model(
-                        "global-inactive-global",
-                        "inactive-global",
-                        "Disabled Global Model",
-                        false,
-                    ),
-                ])));
+                .with_global_model_reader(Arc::new(
+                    InMemoryGlobalModelReadRepository::seed(vec![
+                        metadata,
+                        second_metadata,
+                        sample_public_global_model(
+                            "global-inactive-global",
+                            "inactive-global",
+                            "Disabled Global Model",
+                            false,
+                        ),
+                    ])
+                    .with_admin_provider_models(vec![
+                        provider_limit_metadata("allowed-provider", "public-alias", None),
+                    ]),
+                ));
         let gateway = build_router_with_state(
             AppState::new()
                 .expect("state")
@@ -575,6 +613,170 @@ fn gateway_opencode_fails_closed_without_catalog_reader() {
         let payload: serde_json::Value = response.json().await.expect("json");
         assert_eq!(payload["error"]["code"], "catalog_unavailable");
         assert!(payload.get("provider").is_none());
+        handle.abort();
+    });
+}
+
+#[test]
+fn gateway_opencode_limits_include_fallback_providers_and_respect_key_authorization() {
+    run_frontdoor_async_test("opencode-provider-limits", async {
+        let mut both = unrestricted_models_snapshot("both-key", "user");
+        both.user_allowed_providers =
+            Some(vec!["primary".into(), "fallback".into(), "inactive".into()]);
+        let mut primary_only = both.clone();
+        primary_only.api_key_id = "primary-key".into();
+        primary_only.api_key_allowed_providers = Some(vec!["primary".into()]);
+        let auth = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![
+            (Some(hash_api_key("synthetic-both")), both),
+            (Some(hash_api_key("synthetic-primary")), primary_only),
+        ]));
+        let primary = sample_models_candidate_row("primary", "custom", "openai:chat", "shared", 1);
+        let fallback =
+            sample_models_candidate_row("fallback", "custom", "openai:responses", "shared", 100);
+        let mut duplicate = fallback.clone();
+        duplicate.key_id = "duplicate-fallback-key".into();
+        let denied = sample_models_candidate_row("denied", "custom", "openai:chat", "shared", 0);
+        let mut inactive =
+            sample_models_candidate_row("inactive", "custom", "openai:chat", "shared", 0);
+        inactive.provider_is_active = false;
+        let inherited =
+            sample_models_candidate_row("primary", "custom", "openai:chat", "inherited", 1);
+        let mut shared_model =
+            sample_public_global_model("global-shared", "shared", "Shared", true);
+        shared_model.config = Some(json!({"context_limit": 200000, "output_limit": 16000}));
+        let mut inherited_model =
+            sample_public_global_model("global-inherited", "inherited", "Inherited", true);
+        inherited_model.config = shared_model.config.clone();
+        let metadata = InMemoryGlobalModelReadRepository::seed(vec![shared_model, inherited_model])
+            .with_admin_provider_models(vec![
+                provider_limit_metadata("primary", "shared", Some(json!({
+                    "context_limit": 150000, "output_limit": 8000,
+                    "apiKey": "private-config-canary", "options": {"headers": {"Authorization": "private-config-canary"}}
+                }))),
+                provider_limit_metadata("fallback", "shared", Some(json!({"context_limit": 64000}))),
+                provider_limit_metadata("denied", "shared", Some(json!({"context_limit": 100, "output_limit": 10}))),
+                provider_limit_metadata("inactive", "shared", Some(json!({"context_limit": 100, "output_limit": 10}))),
+                provider_limit_metadata("primary", "inherited", None),
+            ]);
+        let data = GatewayDataState::with_minimal_candidate_selection_and_auth_for_tests(
+            Arc::new(InMemoryMinimalCandidateSelectionReadRepository::seed(vec![
+                primary, fallback, duplicate, denied, inactive, inherited,
+            ])),
+            auth,
+        )
+        .with_global_model_reader(Arc::new(metadata));
+        let (url, handle) = start_server(build_router_with_state(
+            AppState::new()
+                .expect("state")
+                .with_data_state_for_tests(data),
+        ))
+        .await;
+        let client = reqwest::Client::new();
+        for (token, expected_context) in [("synthetic-both", 64000), ("synthetic-primary", 150000)]
+        {
+            let response = client
+                .get(format!("{url}/api/opencode/config"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .expect("request");
+            assert_eq!(response.status(), StatusCode::OK);
+            let payload: serde_json::Value = response.json().await.expect("json");
+            let models = &payload["provider"]["aether"]["models"];
+            assert_eq!(
+                models["shared"]["limit"],
+                json!({"context": expected_context, "output": 8000})
+            );
+            assert_eq!(
+                models["inherited"]["limit"],
+                json!({"context": 200000, "output": 16000})
+            );
+            for private_value in [
+                "private-config-canary",
+                "private-upstream-name",
+                "duplicate-fallback-key",
+            ] {
+                assert!(
+                    !payload.to_string().contains(private_value),
+                    "private metadata leaked"
+                );
+            }
+        }
+        handle.abort();
+    });
+}
+
+#[test]
+fn gateway_opencode_omits_limits_when_a_candidate_has_unknown_or_invalid_metadata() {
+    run_frontdoor_async_test("opencode-unknown-limits", async {
+        let auth = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
+            Some(hash_api_key("synthetic-limits")),
+            unrestricted_models_snapshot("key", "user"),
+        )]));
+        let aliases = ["missing", "invalid", "unknown-fallback"];
+        let mut rows = Vec::new();
+        let mut models = Vec::new();
+        for alias in aliases {
+            rows.push(sample_models_candidate_row(
+                "primary",
+                "custom",
+                "openai:chat",
+                alias,
+                1,
+            ));
+            let mut model =
+                sample_public_global_model(&format!("global-{alias}"), alias, alias, true);
+            model.config = Some(json!({"context_limit": 200000, "output_limit": 16000}));
+            models.push(model);
+        }
+        rows.push(sample_models_candidate_row(
+            "fallback",
+            "custom",
+            "openai:responses",
+            "unknown-fallback",
+            100,
+        ));
+        let metadata =
+            InMemoryGlobalModelReadRepository::seed(models).with_admin_provider_models(vec![
+                provider_limit_metadata("primary", "invalid", Some(json!({"context_limit": 0}))),
+                provider_limit_metadata(
+                    "primary",
+                    "unknown-fallback",
+                    Some(json!({"context_limit": 64000})),
+                ),
+            ]);
+        let data = GatewayDataState::with_minimal_candidate_selection_and_auth_for_tests(
+            Arc::new(InMemoryMinimalCandidateSelectionReadRepository::seed(rows)),
+            auth,
+        )
+        .with_global_model_reader(Arc::new(metadata));
+        let (url, handle) = start_server(build_router_with_state(
+            AppState::new()
+                .expect("state")
+                .with_data_state_for_tests(data),
+        ))
+        .await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/api/opencode/config"))
+            .bearer_auth("synthetic-limits")
+            .send()
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload: serde_json::Value = response.json().await.expect("json");
+        let models = payload["provider"]["aether"]["models"]
+            .as_object()
+            .expect("models");
+        for alias in aliases {
+            assert!(
+                models.contains_key(alias),
+                "public alias should remain visible"
+            );
+            assert!(
+                models[alias].get("limit").is_none(),
+                "unknown metadata must not advertise a guessed limit"
+            );
+        }
         handle.abort();
     });
 }

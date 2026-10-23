@@ -270,6 +270,46 @@ pub(super) async fn list_model_rows_for_query_formats(
     Some(sort_and_dedup_model_rows(collected))
 }
 
+/// Keep every authorized provider-model mapping for conservative catalog limits.
+/// Other model-list routes intentionally deduplicate aliases and keep their behavior.
+pub(super) async fn list_provider_model_rows_for_query_formats(
+    state: &AppState,
+    query_api_formats: &[&str],
+    auth_snapshot: Option<&crate::data::auth::GatewayAuthApiKeySnapshot>,
+) -> Option<Vec<StoredMinimalCandidateSelectionRow>> {
+    let mut collected = Vec::new();
+    for query_format in query_api_formats {
+        let rows = await_models_route_read(
+            "candidate_selection_by_api_format",
+            state.list_minimal_candidate_selection_rows_for_api_format(query_format),
+        )
+        .await?;
+        collected.extend(filter_eligible_model_rows(
+            rows,
+            auth_snapshot,
+            query_format,
+        ));
+    }
+    let mut seen = BTreeSet::new();
+    Some(
+        sort_model_rows(collected)
+            .into_iter()
+            .filter(|row| {
+                row.provider_is_active
+                    && row.endpoint_is_active
+                    && row.key_is_active
+                    && row.model_is_active
+                    && row.model_is_available
+                    && seen.insert((
+                        row.global_model_name.clone(),
+                        row.provider_id.clone(),
+                        row.model_id.clone(),
+                    ))
+            })
+            .collect(),
+    )
+}
+
 async fn list_model_rows_for_client_format(
     state: &AppState,
     api_format: &str,

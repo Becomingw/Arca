@@ -59,6 +59,22 @@ using the selected API key. This endpoint must be deployed before installation;
 it provides a key-free OpenCode config containing `provider.aether`, including
 `options.baseURL` and the key's currently accessible models and full known
 metadata. The local installer injects the key into the private client config.
+For OpenCode token limits, the catalog resolves `context_limit` and `output_limit`
+from each eligible provider-model association's `config`, inheriting absent fields
+from the global model. It advertises the smallest effective values across the
+providers accessible to the selected API key, rather than just the highest-priority
+provider. Restricting that key to a provider therefore restricts the aggregation too.
+Only positive, JavaScript-safe integer limits are published. Missing association
+metadata, an invalid explicit override, an unknown effective limit, or output larger
+than context causes the alias's `limit` to be omitted rather than guessed. Inactive
+or unavailable associations do not contribute. Provider IDs, upstream names and
+other association configuration are never included in the generated catalog.
+
+These are configured limits, not measured upstream capacities. Operators still
+need to establish the actual provider-specific values. This does not infer that an
+upstream “high demand” error means context overflow, and it does not change Codex
+installation, CC Switch imports, Codex model cards, or request admission limits.
+
 The gateway must use HTTPS; plain HTTP is allowed only for loopback development.
 URLs containing credentials, query parameters or fragments and HTTP redirects
 are rejected. The key is never put into a request URL or command-line argument.
