@@ -978,15 +978,14 @@ async fn gateway_waits_for_api_key_concurrency_slot_then_executes_openai_respons
 }
 
 #[test]
-fn gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_budget_elapses() {
+fn gateway_rejects_openai_responses_sync_when_api_key_concurrency_wait_budget_elapses() {
     run_cli_sync_test(
-        "gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_budget_elapses",
-        gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_budget_elapses_impl,
+        "gateway_rejects_openai_responses_sync_when_api_key_concurrency_wait_budget_elapses",
+        gateway_rejects_openai_responses_sync_when_api_key_concurrency_wait_budget_elapses_impl,
     );
 }
 
-async fn gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_budget_elapses_impl()
-{
+async fn gateway_rejects_openai_responses_sync_when_api_key_concurrency_wait_budget_elapses_impl() {
     fn hash_api_key(value: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(value.as_bytes());
@@ -1178,15 +1177,19 @@ async fn gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_b
             }),
         );
 
+    let release_inflight = Arc::new(tokio::sync::Notify::new());
+    let upstream_release = Arc::clone(&release_inflight);
     let execution_runtime = Router::new().route(
         "/v1/execute/sync",
         any(move |_request: Request| {
             let execution_runtime_hits_inner = Arc::clone(&execution_runtime_hits_clone);
+            let upstream_release = Arc::clone(&upstream_release);
             async move {
                 *execution_runtime_hits_inner
                     .lock()
                     .expect("mutex should lock") += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                // Hold the first request until the bounded wait rejects the second.
+                upstream_release.notified().await;
                 Json(json!({
                     "request_id": "trace-openai-cli-local-timeout-123",
                     "status_code": 200,
@@ -1311,36 +1314,24 @@ async fn gateway_executes_openai_responses_sync_after_api_key_concurrency_wait_b
         started_at.elapsed() >= std::time::Duration::from_millis(100),
         "request should wait for the bounded concurrency window before retrying"
     );
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response
-            .headers()
-            .get(EXECUTION_PATH_HEADER)
-            .and_then(|value| value.to_str().ok()),
-        Some(EXECUTION_PATH_EXECUTION_RUNTIME_SYNC)
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get(LOCAL_EXECUTION_RUNTIME_MISS_REASON_HEADER)
-            .and_then(|value| value.to_str().ok()),
-        None
-    );
-    let payload: serde_json::Value = response.json().await.expect("body should parse");
-    assert_eq!(payload["model"], "gpt-5-upstream");
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let stored_candidates = request_candidate_repository
         .list_by_request_id("trace-openai-cli-local-timeout-123")
         .await
         .expect("request candidate trace should read");
     assert_eq!(stored_candidates.len(), 1);
-    assert_eq!(stored_candidates[0].status, RequestCandidateStatus::Success);
-    assert_eq!(stored_candidates[0].skip_reason.as_deref(), None);
+    assert_eq!(stored_candidates[0].status, RequestCandidateStatus::Skipped);
+    assert_eq!(
+        stored_candidates[0].skip_reason.as_deref(),
+        Some("auth_api_key_concurrency_limit_reached")
+    );
     assert_eq!(
         *execution_runtime_hits.lock().expect("mutex should lock"),
-        2
+        1
     );
     assert_eq!(*public_hits.lock().expect("mutex should lock"), 0);
+    release_inflight.notify_one();
     let first_response = first_request.await.expect("inflight request should join");
     assert_eq!(first_response.status(), StatusCode::OK);
 
