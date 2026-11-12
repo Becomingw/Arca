@@ -27,7 +27,7 @@ use crate::cache::{
     record_candidate_row_page_cache_miss, record_candidate_row_page_cache_none, CacheLoadObserver,
     CandidatePageCacheKey, CandidatePageSnapshot, CandidateRowPageCacheKey,
 };
-use crate::clock::request_distribution_seed;
+use crate::clock::{current_unix_secs, request_distribution_seed};
 use crate::data::candidate_selection::{
     read_api_format_rows_fallback_page, read_requested_model_rows_fast_path_page,
     requested_model_candidate_names, MinimalCandidateSelectionRowSource,
@@ -171,6 +171,7 @@ impl AiCandidatePreselectionPort for GatewayLocalCandidatePreselectionPort<'_> {
                     .is_none()
                     .then_some(self.client_session_affinity)
                     .flatten(),
+                current_unix_secs(),
                 self.ranking_seed,
                 false,
                 self.request_operation,
@@ -1289,6 +1290,7 @@ impl<'a> LocalCandidatePreselectionPageCursor<'a> {
                     .is_none()
                     .then_some(self.client_session_affinity.as_ref())
                     .flatten(),
+                current_unix_secs(),
                 self.ranking_seed,
                 self.ordering_config,
             )
@@ -1488,6 +1490,79 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn first_and_paged_preselection_use_real_clock_with_extreme_ranking_seed() {
+        let row = standard_candidate_row("cooling-provider", "openai:chat", 0);
+        let (provider, endpoint, mut key) = provider_catalog_for_standard_row(&row, false);
+        key.circuit_breaker_by_format = Some(serde_json::json!({
+            "openai:chat": {"open": true, "next_probe_at_unix_secs": current_unix_secs() + 3600}
+        }));
+        let data =
+            GatewayDataState::with_provider_catalog_and_minimal_candidate_selection_for_tests(
+                Arc::new(InMemoryProviderCatalogReadRepository::seed(
+                    vec![provider],
+                    vec![endpoint],
+                    vec![key],
+                )),
+                Arc::new(InMemoryMinimalCandidateSelectionReadRepository::seed([row])),
+            )
+            .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY);
+        let app = AppState::new().unwrap().with_data_state_for_tests(data);
+        let auth = unrestricted_auth_snapshot();
+        let port = GatewayLocalCandidatePreselectionPort {
+            state: PlannerAppState::new(&app),
+            client_api_format: "openai:chat",
+            requested_model: "gpt-5",
+            request_operation: None,
+            require_streaming: false,
+            required_capabilities: None,
+            auth_snapshot: &auth,
+            routing_policy: None,
+            client_session_affinity: None,
+            use_api_format_alias_match: true,
+            key_mode: LocalCandidatePreselectionKeyMode::ProviderEndpointKeyModelAndApiFormat,
+            candidate_api_formats: vec!["openai:chat".into()],
+            model_directive_routing_models: BTreeMap::new(),
+            ranking_seed: u64::MAX,
+        };
+        let (selected, skipped) = port
+            .list_candidates_for_api_format("openai:chat", true)
+            .await
+            .unwrap();
+        assert!(selected.is_empty());
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].skip_reason, "key_circuit_open");
+
+        let policy = crate::system_features::ModelDirectivePolicySnapshot::load(&app).await;
+        let mut cursor = LocalCandidatePreselectionPageCursor::new(
+            PlannerAppState::new(&app),
+            &policy,
+            "openai:chat",
+            "gpt-5",
+            None,
+            false,
+            None,
+            &auth,
+            None,
+            None,
+            None,
+            true,
+            LocalCandidatePreselectionKeyMode::ProviderEndpointKeyModelAndApiFormat,
+            false,
+            None,
+        )
+        .await;
+        cursor.ranking_seed = u64::MAX;
+        let page = cursor
+            .next_page()
+            .await
+            .unwrap()
+            .expect("cooling candidate page");
+        assert!(page.candidates.is_empty());
+        assert_eq!(page.skipped_candidates.len(), 1);
+        assert_eq!(page.skipped_candidates[0].skip_reason, "key_circuit_open");
+    }
 
     #[test]
     fn compaction_operation_excludes_non_responses_provider_formats() {

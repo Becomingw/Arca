@@ -20,7 +20,7 @@ pub(super) fn rank_scheduler_candidates(
     required_capabilities: Option<&serde_json::Value>,
     priority_affinity_key: Option<&str>,
     cached_affinity_target: Option<&SchedulerAffinityTarget>,
-    now_unix_secs: u64,
+    ranking_seed: u64,
 ) {
     let rankables = candidates
         .iter()
@@ -71,7 +71,7 @@ pub(super) fn rank_scheduler_candidates(
             priority_mode: ordering_config.priority_mode,
             ranking_mode: scheduler_ranking_mode(ordering_config.scheduling_mode),
             include_health: true,
-            load_balance_seed: now_unix_secs,
+            load_balance_seed: ranking_seed,
         },
     );
 }

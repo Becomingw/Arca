@@ -2839,3 +2839,90 @@ async fn same_priority_candidates_use_aggregate_health_score_when_api_format_spe
     assert_eq!(selected.provider_id, "provider-b");
     assert_eq!(selected.key_id, "key-b");
 }
+
+#[tokio::test]
+async fn ranking_seed_does_not_change_circuit_cooldown_boundary() {
+    let row = sample_row();
+    let key = sample_key("key-1", "provider-1", Some(10)).with_health_fields(
+        None,
+        Some(json!({"openai:chat": {"open": true, "next_probe_at_unix_secs": 1000}})),
+    );
+    let state = AppState::new().unwrap().with_data_state_for_tests(
+        GatewayDataState::with_provider_catalog_and_minimal_candidate_selection_for_tests(
+            Arc::new(InMemoryProviderCatalogReadRepository::seed(
+                vec![sample_provider("provider-1", None)],
+                vec![],
+                vec![key],
+            )),
+            Arc::new(InMemoryMinimalCandidateSelectionReadRepository::seed([row])),
+        ),
+    );
+    for seed in [0, 1000, u64::MAX] {
+        for now in [999, 1000] {
+            let (selected, skipped) = super::super::selection::collect_selectable_candidates_with_skip_reasons_and_ordering(
+                state.data.as_ref(), &state, "openai:chat", "gpt-4.1", false,
+                None, None, None, now, seed, false, None, SchedulerOrderingConfig::default(),
+            ).await.unwrap();
+            if now < 1000 {
+                assert!(selected.is_empty());
+                assert_eq!(skipped[0].skip_reason, "key_circuit_open");
+            } else {
+                assert_eq!(selected.len(), 1);
+                assert!(skipped.is_empty());
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn extreme_ranking_seed_preserves_provider_key_concurrency_gate() {
+    let state = provider_key_concurrency_state(
+        vec![provider_key_concurrency_row(
+            "test-provider-a",
+            "endpoint-a",
+            "provider-key-a",
+            "alpha",
+            0,
+            0,
+        )],
+        vec![provider_key_with_concurrent_limit(
+            "provider-key-a",
+            "test-provider-a",
+            Some(1),
+        )],
+        vec![active_provider_key_candidate(
+            "active",
+            "request",
+            "test-provider-a",
+            "endpoint-a",
+            "provider-key-a",
+            RequestCandidateStatus::Pending,
+        )],
+    );
+    for seed in [0, u64::MAX] {
+        let (selected, skipped) =
+            super::super::selection::collect_selectable_candidates_with_skip_reasons_and_ordering(
+                state.data.as_ref(),
+                &state,
+                "openai:chat",
+                "gpt-4.1",
+                false,
+                None,
+                None,
+                None,
+                100,
+                seed,
+                false,
+                None,
+                SchedulerOrderingConfig::default(),
+            )
+            .await
+            .unwrap();
+        assert!(selected.is_empty());
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(
+            skipped[0].skip_reason,
+            "provider_key_concurrency_limit_reached"
+        );
+    }
+}
