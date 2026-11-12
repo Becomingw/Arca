@@ -525,13 +525,10 @@ pub(crate) async fn record_failed_usage_for_runtime_miss_request(
             .as_deref()
             .and_then(infer_endpoint_kind)
             .map(ToOwned::to_owned),
-        has_format_conversion: routing_candidate.and_then(|value| {
-            value
-                .client_api_format
-                .as_deref()
-                .zip(value.provider_api_format.as_deref())
-                .map(|(left, right)| !left.eq_ignore_ascii_case(right))
-        }),
+        has_format_conversion: runtime_miss_has_format_conversion(
+            routing_candidate,
+            api_format.as_deref(),
+        ),
         status_code: Some(status_code),
         error_message: Some(local_execution_runtime_miss_detail.to_string()),
         error_category: error_category_for_failed_status(status_code),
@@ -685,6 +682,22 @@ fn select_last_failed_request_candidate(
                     .unwrap_or(candidate.created_at_unix_ms),
             )
         })
+}
+
+fn runtime_miss_has_format_conversion(
+    routing_candidate: Option<&RuntimeMissCandidateContext>,
+    resolved_client_api_format: Option<&str>,
+) -> Option<bool> {
+    let candidate = routing_candidate?;
+    // A body-build failure can precede candidate contract metadata persistence.
+    // Use the same client-format fallback as the usage record, but do not infer
+    // a provider format (or a conversion) when no routing candidate is known.
+    candidate
+        .client_api_format
+        .as_deref()
+        .or(resolved_client_api_format)
+        .zip(candidate.provider_api_format.as_deref())
+        .map(|(client, provider)| !client.eq_ignore_ascii_case(provider))
 }
 
 fn select_last_runtime_miss_executed_candidate(
@@ -1259,9 +1272,9 @@ mod tests {
         apply_runtime_miss_usage_routing, beautify_local_execution_client_error_message,
         insert_runtime_miss_candidate_usage_metadata,
         request_candidate_represents_provider_execution, runtime_miss_client_error_body,
-        runtime_miss_original_headers_json, select_last_runtime_miss_executed_candidate,
-        select_last_runtime_miss_routing_candidate, LocalExecutionRuntimeMissContext,
-        RuntimeMissCandidateContext,
+        runtime_miss_has_format_conversion, runtime_miss_original_headers_json,
+        select_last_runtime_miss_executed_candidate, select_last_runtime_miss_routing_candidate,
+        LocalExecutionRuntimeMissContext, RuntimeMissCandidateContext,
     };
     use crate::constants::EXECUTION_PATH_LOCAL_EXECUTION_RUNTIME_MISS;
     use crate::state::LocalExecutionRuntimeMissDiagnostic;
@@ -1444,6 +1457,97 @@ mod tests {
             select_last_runtime_miss_routing_candidate(&contexts)
                 .map(|candidate| candidate.candidate.id.as_str()),
             Some("cand-skipped")
+        );
+    }
+
+    #[test]
+    fn runtime_miss_conversion_flag_uses_client_fallback_for_unbuilt_candidate() {
+        let skipped_candidate = StoredRequestCandidate::new(
+            "cand-skipped".to_string(),
+            "req-1".to_string(),
+            Some("user-1".to_string()),
+            Some("api-key-1".to_string()),
+            Some("alice".to_string()),
+            Some("default".to_string()),
+            0,
+            0,
+            Some("provider-1".to_string()),
+            Some("endpoint-1".to_string()),
+            Some("provider-key-1".to_string()),
+            RequestCandidateStatus::Skipped,
+            Some("provider_request_body_build_failed".to_string()),
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json!({
+                "failure_diagnostic": {
+                    "kind": "request_conversion",
+                    "path": "$.n",
+                    "message": "openai:chat 字段 n 不能无损转换到 openai:responses：OpenAI Responses request has no canonical equivalent for this Chat field",
+                    "safe_to_show": true
+                },
+                "request_conversion_error": {
+                    "path": "$.n",
+                    "message": "compat"
+                }
+            })),
+            None,
+            100,
+            None,
+            None,
+        )
+        .expect("candidate should build");
+
+        let mut context = LocalExecutionRuntimeMissContext {
+            candidate_contexts: vec![RuntimeMissCandidateContext {
+                candidate: skipped_candidate,
+                provider_name: Some("openai".to_string()),
+                key_name: Some("prod".to_string()),
+                client_api_format: Some("openai:chat".to_string()),
+                provider_api_format: Some("openai:responses".to_string()),
+                global_model_name: Some("gpt-5".to_string()),
+                selected_provider_model_name: Some("gpt-5-upstream".to_string()),
+                endpoint_url: Some("https://api.openai.example/v1/responses".to_string()),
+            }],
+            ..LocalExecutionRuntimeMissContext::default()
+        };
+
+        let candidate = &mut context.candidate_contexts[0];
+        candidate.client_api_format = None;
+        candidate.provider_api_format = Some("gemini:generate_content".to_string());
+        assert_eq!(
+            runtime_miss_has_format_conversion(Some(candidate), Some("openai:chat")),
+            Some(true)
+        );
+        assert!(!request_candidate_represents_provider_execution(
+            &candidate.candidate
+        ));
+        assert_eq!(
+            runtime_miss_has_format_conversion(Some(candidate), None),
+            None
+        );
+
+        candidate.provider_api_format = Some("OPENAI:CHAT".to_string());
+        assert_eq!(
+            runtime_miss_has_format_conversion(Some(candidate), Some("openai:chat")),
+            Some(false)
+        );
+        candidate.client_api_format = Some("openai:responses".to_string());
+        assert_eq!(
+            runtime_miss_has_format_conversion(Some(candidate), Some("openai:chat")),
+            Some(true)
+        );
+        candidate.provider_api_format = None;
+        assert_eq!(
+            runtime_miss_has_format_conversion(Some(candidate), Some("openai:chat")),
+            None
+        );
+        assert_eq!(
+            runtime_miss_has_format_conversion(None, Some("openai:chat")),
+            None
         );
     }
 
