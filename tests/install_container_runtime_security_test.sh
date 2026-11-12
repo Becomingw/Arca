@@ -63,7 +63,7 @@ done
 
 assert_line "${REPO_ROOT}/.env.example" "DB_PASSWORD="
 assert_line "${REPO_ROOT}/.env.example" "REDIS_PASSWORD="
-assert_line "${REPO_ROOT}/README.md" "chmod 600 .env"
+assert_line "${REPO_ROOT}/README.md" "cp .env.example .env && chmod 600 .env"
 grep -Fq '${DB_PASSWORD:?set DB_PASSWORD in .env}' "${REPO_ROOT}/docker-compose.yml" \
     || fail_test "Postgres password is not required by Compose"
 grep -Fq '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}' "${REPO_ROOT}/docker-compose.yml" \

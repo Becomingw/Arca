@@ -54,10 +54,10 @@ with tempfile.TemporaryDirectory(prefix="aether-compose-databases-") as director
         assert app["security_opt"] == ["no-new-privileges:true"]
         assert not app.get("privileged", False)
         app_env = app["environment"]
-        assert app_env["AETHER_DATABASE_DRIVER"] == "postgres"
+        assert app_env["ARCA_DATABASE_DRIVER"] == "postgres"
         assert app_env["DATABASE_URL"] == "postgresql://postgres:fixture-postgres@postgres:5432/aether"
         assert app_env["REDIS_URL"] == "redis://:fixture-redis@redis:6379/0"
-        assert app_env["AETHER_LOG_DESTINATION"] == "stdout"
+        assert app_env["ARCA_LOG_DESTINATION"] == "stdout"
         for key in ("DB_PASSWORD", "REDIS_PASSWORD"):
             result = compose_config(files, overrides={key: ""})
             assert result.returncode != 0, f"empty {key} was accepted"
@@ -67,10 +67,10 @@ with tempfile.TemporaryDirectory(prefix="aether-compose-databases-") as director
     assert result.returncode == 0, result.stderr
     config = json.loads(result.stdout)
     assert set(config["services"]) == {"release-local-app", "postgres"}
-    assert set(config["volumes"]) == {"postgres_data", "aether_release_local_root"}
+    assert set(config["volumes"]) == {"postgres_data", "arca_release_local_root"}
     app_env = config["services"]["release-local-app"]["environment"]
-    assert app_env["AETHER_DATABASE_DRIVER"] == "postgres"
-    assert app_env["AETHER_DATABASE_URL"] == "postgresql://postgres:fixture-postgres@postgres:5432/aether"
+    assert app_env["ARCA_DATABASE_DRIVER"] == "postgres"
+    assert app_env["ARCA_DATABASE_URL"] == "postgresql://postgres:fixture-postgres@postgres:5432/aether"
     result = compose_config(["docker-compose.release-local.yml"], overrides={"DB_PASSWORD": ""})
     assert result.returncode != 0, "empty DB_PASSWORD was accepted"
     assert "set DB_PASSWORD in .env" in result.stderr, result.stderr
@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix="aether-compose-databases-") as director
             assert result.returncode == 0, result.stderr
             app = json.loads(result.stdout)["services"]["app"]
             assert app["user"] == "0:0", files
-            assert app["environment"]["AETHER_LOG_DESTINATION"] == "stdout", files
+            assert app["environment"]["ARCA_LOG_DESTINATION"] == "stdout", files
             assert all(
                 volume["target"] not in ("/app/logs", "/opt/aether/logs")
                 for volume in app.get("volumes", [])

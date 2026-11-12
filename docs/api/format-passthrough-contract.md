@@ -54,6 +54,11 @@ Required behavior:
 - Do not use `None` or silent omission to represent conversion failure.
 - Newly added provider fields follow the same rule as other unknown fields: preserve same-format, fail closed cross-format with `UnauditedField`. A code change is required only when Arca intentionally supports a new cross-format semantic mapping.
 
+Responses namespace tools with a valid name, description, and an empty `tools` array
+declare no callable functions. Cross-format conversion accepts these placeholders
+and emits only callable tools; same-format conversion preserves the empty namespace.
+Malformed namespace definitions and ambiguous callable identities still fail closed.
+
 ## Pure Conversion Interface
 
 Pure conversion lives in `crates/aether-ai/formats` and is limited to:

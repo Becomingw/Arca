@@ -81,6 +81,7 @@ pub(super) async fn select_minimal_candidate(
         auth_snapshot,
         client_session_affinity,
         now_unix_secs,
+        now_unix_secs,
         ordering_config,
         scheduling_priority_affinity_key(
             auth_snapshot,
@@ -118,6 +119,7 @@ pub(super) async fn collect_selectable_candidates(
             required_capabilities,
             auth_snapshot,
             client_session_affinity,
+            now_unix_secs,
             now_unix_secs,
             enable_model_directives,
             None,
@@ -159,6 +161,7 @@ pub(super) async fn collect_selectable_candidates_with_skip_reasons(
         auth_snapshot,
         client_session_affinity,
         now_unix_secs,
+        now_unix_secs,
         enable_model_directives,
         request_operation,
         SchedulerOrderingConfig::default(),
@@ -177,6 +180,7 @@ pub(super) async fn collect_selectable_candidates_with_skip_reasons_and_ordering
     auth_snapshot: Option<&GatewayAuthApiKeySnapshot>,
     client_session_affinity: Option<&ClientSessionAffinity>,
     now_unix_secs: u64,
+    ranking_seed: u64,
     enable_model_directives: bool,
     request_operation: Option<&str>,
     ordering_config: SchedulerOrderingConfig,
@@ -212,6 +216,7 @@ pub(super) async fn collect_selectable_candidates_with_skip_reasons_and_ordering
         auth_snapshot,
         client_session_affinity,
         now_unix_secs,
+        ranking_seed,
         ordering_config,
         priority_affinity_key,
     )
@@ -228,6 +233,7 @@ pub(super) async fn collect_selectable_enumerated_candidates_with_skip_reasons(
     auth_snapshot: Option<&GatewayAuthApiKeySnapshot>,
     client_session_affinity: Option<&ClientSessionAffinity>,
     now_unix_secs: u64,
+    ranking_seed: u64,
     ordering_config: SchedulerOrderingConfig,
     priority_affinity_key: Option<&str>,
 ) -> Result<
@@ -269,7 +275,7 @@ pub(super) async fn collect_selectable_enumerated_candidates_with_skip_reasons(
             required_capabilities,
             priority_affinity_key,
             cached_affinity_target.as_ref(),
-            now_unix_secs,
+            ranking_seed,
         );
         return Ok((
             Vec::new(),
@@ -292,7 +298,7 @@ pub(super) async fn collect_selectable_enumerated_candidates_with_skip_reasons(
         required_capabilities,
         priority_affinity_key,
         cached_affinity_target.as_ref(),
-        now_unix_secs,
+        ranking_seed,
     );
 
     Ok((selected, skipped))

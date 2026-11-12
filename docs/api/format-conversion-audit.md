@@ -34,6 +34,18 @@ Provider schema refresh is not a runtime dependency. Same-format runtime paths d
 | Tool schema roundtrip | Claude `input_schema` and Gemini `functionDeclarations.parameters` preserve raw same-format schema through provider-specific extensions. |
 | Tool result ids | Chat `tool_call_id`, Responses `call_id`, Claude `tool_use_id`, and Gemini `functionResponse.id` are mapped through canonical tool IDs. |
 
+## Failed-request usage diagnostics
+
+`has_format_conversion` on a runtime-miss usage record describes the client/provider
+format difference, not proof that conversion succeeded or that an upstream request
+was sent. If a routing candidate fails while building its request body, its client
+format metadata may not have been persisted yet. In that case the flag uses the
+same authenticated endpoint-signature fallback as the usage record's `api_format`.
+A known candidate and provider format are still required; missing candidates or
+unknown formats do not imply conversion. Skipped candidates remain non-executed.
+This reporting rule does not change conversion validation, candidate selection,
+or upstream error handling.
+
 ## OpenAI Chat -> OpenAI Responses
 
 | Chat field | Canonical handling | Responses output | Status |
