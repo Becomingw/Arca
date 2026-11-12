@@ -4121,6 +4121,38 @@ mod tests {
     }
 
     #[test]
+    fn responses_empty_namespace_preserves_callable_tools_in_sync_and_streaming_requests() {
+        let body = json!({
+            "model": "deepseek-v4.1-flash",
+            "input": "Call ping once.",
+            "tools": [
+                {"type":"namespace", "name":"deferred", "description":"Tools loaded on demand", "tools":[]},
+                {"type":"function", "name":"ping", "parameters":{"type":"object","properties":{}}}
+            ]
+        });
+        for provider in ["custom", "opencode_go"] {
+            for streaming in [false, true] {
+                let ctx = FormatContext::default()
+                    .with_mapped_model("deepseek-v4.1-flash")
+                    .with_upstream_stream(streaming)
+                    .with_report_context(
+                        json!({"provider_type":provider,"provider_api_format":"openai:chat"}),
+                    );
+                let mut request_body = body.clone();
+                request_body["stream"] = json!(streaming);
+                let converted =
+                    convert_request("openai:responses", "openai:chat", &request_body, &ctx)
+                        .expect("an empty namespace declares no callable tools");
+                assert_eq!(converted["tools"].as_array().unwrap().len(), 1);
+                assert_eq!(converted["tools"][0]["function"]["name"], "ping");
+                assert_eq!(converted["stream"].as_bool().unwrap_or(false), streaming);
+            }
+        }
+        let same = convert_request_pure("openai:responses", "openai:responses", &body).unwrap();
+        assert_eq!(same.value["tools"], body["tools"]);
+    }
+
+    #[test]
     fn responses_namespace_history_uses_the_same_chat_alias_as_the_definition() {
         let body = json!({
             "model": "gpt-source",

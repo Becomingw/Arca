@@ -207,10 +207,6 @@ impl NamespaceToolAliases {
             && !self
                 .invalid_namespace_tool_indices
                 .contains(&source_tool_index)
-            && self
-                .tools
-                .iter()
-                .any(|tool| tool.source_tool_index == source_tool_index)
     }
 
     pub(crate) fn has_invalid_namespace_tools(&self) -> bool {
@@ -258,9 +254,8 @@ fn parse_namespace_tool(
         return None;
     }
     let children = raw.get("tools")?.as_array()?;
-    if children.is_empty() {
-        return None;
-    }
+    // Empty namespaces are valid deferred-tool placeholders. They contribute no
+    // callable definitions when flattened, but must not invalidate sibling tools.
 
     let mut names = BTreeSet::new();
     let mut parsed = Vec::with_capacity(children.len());
