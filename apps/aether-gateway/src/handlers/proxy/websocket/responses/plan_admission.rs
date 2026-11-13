@@ -208,6 +208,8 @@ mod tests {
     #[test]
     fn plan_limit_rejection_is_a_machine_readable_429() {
         let error = PlanUsageAdmissionError::Rejected(PlanUsagePolicyRejection {
+            used: None,
+            estimated: None,
             metric: "request_count",
             limit: 10.0,
             retry_after: 60,

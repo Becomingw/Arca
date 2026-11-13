@@ -35,6 +35,28 @@ timezone. Empty limits are unbounded, not zero allowances.
 No schema migration is added for families: PostgreSQL selectors use `model = ANY`
 over the existing ledger. All pools share the existing per-user admission lock.
 
+## Cost admission estimates
+
+Text input reservations use a heuristic of four ASCII bytes or two non-ASCII UTF-8
+bytes per token, including JSON structure and tool definitions. Media parts retain
+their separate fixed token budgets. The estimate is capped by the provider-model's
+positive `context_limit`, falling back to the global model's limit. This is neither
+an exact tokenizer nor context-length validation; upstream limits still apply and
+actual reported usage determines settlement. Output defaults and hosted-tool
+surcharges remain separate.
+
+OpenAI Chat/Responses reservations consider uncached input and cache reads, but
+do not invent a cache-write charge from shared pricing catalogs. Claude and other
+formats retain their cache-write scenarios. Actual billing rules are unchanged.
+
+Cost-limit errors include `details.used` (finalized plus active reserved USD) and
+`details.estimated` (this request's estimated USD). For rolling windows,
+`retry_after` uses the first ledger release that frees enough capacity, considering
+both window expiry and pending-reservation expiry. It is advisory: other usage or
+settlement can change availability. Fixed windows retain their reset deadline; if
+the request estimate itself exceeds the whole limit, waiting cannot make it fit
+and the fallback window duration is not a promise of admission.
+
 ## Read-Only Preview
 
 `POST /api/admin/access-preview` accepts:

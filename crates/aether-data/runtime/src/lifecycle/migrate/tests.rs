@@ -252,6 +252,7 @@ async fn postgres_internal_model_quotas_are_atomic_and_isolated() {
         retain_until_unix_secs: 2000,
         windows: vec![
             UsagePolicyCostWindow {
+                rolling_seconds: None,
                 models: None,
                 model: Some(model.into()),
                 window_id: format!("model:{model}"),
@@ -260,6 +261,7 @@ async fn postgres_internal_model_quotas_are_atomic_and_isolated() {
                 limit_cost_units: 50,
             },
             UsagePolicyCostWindow {
+                rolling_seconds: None,
                 models: None,
                 model: None,
                 window_id: "total".into(),
@@ -298,6 +300,7 @@ async fn postgres_internal_model_quotas_are_atomic_and_isolated() {
         ReserveUsagePolicyCostOutcome::Rejected {
             window_index: 0,
             used_cost_units: 40,
+            retry_after_secs: None,
             ..
         }
     ));
@@ -316,6 +319,7 @@ async fn postgres_internal_model_quotas_are_atomic_and_isolated() {
         ReserveUsagePolicyCostOutcome::Rejected {
             window_index: 1,
             used_cost_units: 80,
+            retry_after_secs: None,
             ..
         }
     ));

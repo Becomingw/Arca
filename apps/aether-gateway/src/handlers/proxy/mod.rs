@@ -1972,6 +1972,8 @@ async fn proxy_request_inner(
                 aether_runtime_state::RuntimeSemaphoreError::Saturated { limit, .. },
             )) => {
                 let rejection = crate::plan_usage_policy::PlanUsagePolicyRejection {
+                    used: None,
+                    estimated: None,
                     metric: "concurrency",
                     limit: limit as f64,
                     retry_after: 1,

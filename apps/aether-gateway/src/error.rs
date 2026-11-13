@@ -192,6 +192,8 @@ impl IntoResponse for GatewayError {
                         "message": "使用额度已达到上限，请稍后重试",
                         "details": {
                             "metric": rejection.metric,
+                "used": rejection.used,
+                "estimated": rejection.estimated,
                             "window": rejection.window,
                             "limit": rejection.limit,
                             "retry_after": rejection.retry_after,

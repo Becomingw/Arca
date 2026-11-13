@@ -93,22 +93,30 @@ impl BillingService {
                 .iter()
                 .any(|resolution| resolution.tiered_pricing.is_some())
         {
-            let mut cache_creation = base_input.clone();
-            cache_creation.cache_creation_tokens = input_tokens;
-            scenarios.push(cache_creation);
+            // OpenAI Chat/Responses usage includes cache reads in input_tokens,
+            // but has no separately billed cache-write token category. Do not
+            // invent that category from a shared (often Claude) price catalog.
+            if !matches!(
+                estimate.api_format.as_deref(),
+                Some("openai:chat" | "openai:responses")
+            ) {
+                let mut cache_creation = base_input.clone();
+                cache_creation.cache_creation_tokens = input_tokens;
+                scenarios.push(cache_creation);
 
-            if estimate.cache_ttl_minutes.is_none() {
-                let mut cache_creation_5m = base_input.clone();
-                cache_creation_5m.cache_creation_tokens = input_tokens;
-                cache_creation_5m.cache_creation_ephemeral_5m_tokens = input_tokens;
-                cache_creation_5m.cache_ttl_minutes = Some(5);
-                scenarios.push(cache_creation_5m);
+                if estimate.cache_ttl_minutes.is_none() {
+                    let mut cache_creation_5m = base_input.clone();
+                    cache_creation_5m.cache_creation_tokens = input_tokens;
+                    cache_creation_5m.cache_creation_ephemeral_5m_tokens = input_tokens;
+                    cache_creation_5m.cache_ttl_minutes = Some(5);
+                    scenarios.push(cache_creation_5m);
 
-                let mut cache_creation_1h = base_input.clone();
-                cache_creation_1h.cache_creation_tokens = input_tokens;
-                cache_creation_1h.cache_creation_ephemeral_1h_tokens = input_tokens;
-                cache_creation_1h.cache_ttl_minutes = Some(60);
-                scenarios.push(cache_creation_1h);
+                    let mut cache_creation_1h = base_input.clone();
+                    cache_creation_1h.cache_creation_tokens = input_tokens;
+                    cache_creation_1h.cache_creation_ephemeral_1h_tokens = input_tokens;
+                    cache_creation_1h.cache_ttl_minutes = Some(60);
+                    scenarios.push(cache_creation_1h);
+                }
             }
 
             let mut cache_read = base_input;
@@ -1588,7 +1596,7 @@ mod tests {
             service
                 .estimate_authorization_cost_upper_bound(&pricing, &estimate)
                 .expect("known TTL estimate should calculate"),
-            Some(1.25)
+            Some(1.0)
         );
 
         estimate.cache_ttl_minutes = None;
@@ -1601,6 +1609,53 @@ mod tests {
     }
 
     #[test]
+    fn openai_authorization_excludes_cache_writes_without_changing_settlement() {
+        let pricing = BillingModelPricingSnapshot {
+            provider_api_key_rate_multipliers: None,
+            default_price_per_request: None,
+            model_tiered_pricing: None,
+            default_tiered_pricing: Some(json!({"tiers": [{"up_to": null,
+                "input_price_per_1m": 2.0, "output_price_per_1m": 10.0,
+                "cache_creation_price_per_1m": 5.0, "cache_read_price_per_1m": 0.2}]})),
+            ..pricing()
+        };
+        let service = BillingService::new();
+        for format in ["openai:chat", "openai:responses", "claude:messages"] {
+            let mut estimate = BillingAuthorizationEstimateInput::new("chat", 100000);
+            estimate.api_format = Some(format.into());
+            estimate.max_output_tokens = Some(1000);
+            estimate.cache_ttl_minutes = Some(5);
+            let cost = service
+                .estimate_authorization_cost_upper_bound(&pricing, &estimate)
+                .unwrap()
+                .unwrap();
+            if format.starts_with("openai:") {
+                assert!((cost - 0.21).abs() < 1e-8, "{format}: {cost}");
+            } else {
+                assert!(
+                    cost >= 0.51,
+                    "Claude cache-write reservations must remain: {cost}"
+                );
+            }
+            let usage = BillingUsageInput {
+                api_format: Some(format.into()),
+                input_tokens: 100000,
+                output_tokens: 1000,
+                ..BillingUsageInput::new("chat")
+            };
+            assert!(
+                (service
+                    .calculate(&pricing, &usage)
+                    .unwrap()
+                    .actual_total_cost
+                    - 0.21)
+                    .abs()
+                    < 1e-8
+            );
+        }
+    }
+
+    #[test]
     fn authorization_estimate_uses_only_processing_catalogs_eligible_for_context() {
         let service = BillingService::new();
         let mut estimate = BillingAuthorizationEstimateInput::new("chat", 300_000);
@@ -1608,11 +1663,9 @@ mod tests {
         estimate.max_output_tokens = Some(0);
         estimate.cache_ttl_minutes = Some(30);
 
-        for (requested_processing_tier, expected) in [
-            (None, 3.75),
-            (Some("standard"), 3.75),
-            (Some("flex"), 1.875),
-        ] {
+        for (requested_processing_tier, expected) in
+            [(None, 3.0), (Some("standard"), 3.0), (Some("flex"), 1.5)]
+        {
             estimate.requested_processing_tier = requested_processing_tier.map(ToOwned::to_owned);
             assert_eq!(
                 service
@@ -1676,8 +1729,8 @@ mod tests {
             .expect("flex estimate should calculate")
             .expect("flex estimate should be bounded");
 
-        assert_eq!(priority, 61.25);
-        assert_eq!(flex, 15.3125);
+        assert_eq!(priority, 61.0);
+        assert_eq!(flex, 15.25);
         assert!(priority > flex);
     }
 
@@ -1701,7 +1754,7 @@ mod tests {
             service
                 .estimate_authorization_cost_upper_bound(&processing_pricing(), &estimate)
                 .expect("unknown tier should inherit the effective Standard catalog"),
-            Some(0.000925)
+            Some(0.0008)
         );
 
         estimate.requested_processing_tier = Some("priority".to_string());

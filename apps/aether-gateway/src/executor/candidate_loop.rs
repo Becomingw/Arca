@@ -3110,6 +3110,7 @@ mod tests {
                 reservation_expires_at_unix_secs: admitted_at_unix_secs.saturating_add(86_400),
                 retain_until_unix_secs: admitted_at_unix_secs.saturating_add(32 * 86_400),
                 windows: vec![UsagePolicyCostWindow {
+                    rolling_seconds: None,
                     models: None,
                     model: None,
                     window_id: "release-state-probe".to_string(),

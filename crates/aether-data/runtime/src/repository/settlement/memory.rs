@@ -254,7 +254,7 @@ impl SettlementWriteRepository for InMemorySettlementRepository {
             .unwrap_or(0)
             .max(input.retain_until_unix_secs);
         for (window_index, window) in input.windows.iter().enumerate() {
-            let used_cost_units = reservations
+            let eligible = reservations
                 .values()
                 .filter(|reservation| {
                     reservation.reservation_token != input.reservation_token
@@ -269,26 +269,27 @@ impl SettlementWriteRepository for InMemorySettlementRepository {
                         && reservation.admitted_at_unix_secs >= window.starts_at_unix_secs
                         && reservation.admitted_at_unix_secs < window.ends_at_unix_secs
                 })
-                .try_fold(0_u64, |used, reservation| {
-                    let cost_units = match reservation.state {
-                        UsagePolicyCostReservationState::Reserved
-                            if reservation.reservation_expires_at_unix_secs
-                                > input.admitted_at_unix_secs =>
-                        {
-                            reservation.reserved_cost_units
-                        }
-                        UsagePolicyCostReservationState::Finalized => {
-                            reservation.actual_cost_units.unwrap_or(0)
-                        }
-                        UsagePolicyCostReservationState::Reserved
-                        | UsagePolicyCostReservationState::Released => 0,
-                    };
-                    used.checked_add(cost_units).ok_or_else(|| {
-                        DataLayerError::UnexpectedValue(
-                            "usage policy cost total overflowed".to_string(),
-                        )
-                    })
-                })?;
+                .collect::<Vec<_>>();
+            let used_cost_units = eligible.iter().try_fold(0_u64, |used, reservation| {
+                let cost_units = match reservation.state {
+                    UsagePolicyCostReservationState::Reserved
+                        if reservation.reservation_expires_at_unix_secs
+                            > input.admitted_at_unix_secs =>
+                    {
+                        reservation.reserved_cost_units
+                    }
+                    UsagePolicyCostReservationState::Finalized => {
+                        reservation.actual_cost_units.unwrap_or(0)
+                    }
+                    UsagePolicyCostReservationState::Reserved
+                    | UsagePolicyCostReservationState::Released => 0,
+                };
+                used.checked_add(cost_units).ok_or_else(|| {
+                    DataLayerError::UnexpectedValue(
+                        "usage policy cost total overflowed".to_string(),
+                    )
+                })
+            })?;
             if used_cost_units
                 .checked_add(target_reserved_cost_units)
                 .is_none_or(|total| total > window.limit_cost_units)
@@ -297,6 +298,31 @@ impl SettlementWriteRepository for InMemorySettlementRepository {
                     window_index,
                     limit_cost_units: window.limit_cost_units,
                     used_cost_units,
+                    retry_after_secs: window.cost_retry_after(
+                        input.admitted_at_unix_secs,
+                        target_reserved_cost_units,
+                        used_cost_units,
+                        eligible
+                            .iter()
+                            .filter_map(|reservation| match reservation.state {
+                                UsagePolicyCostReservationState::Finalized => Some((
+                                    reservation.actual_cost_units.unwrap_or(0),
+                                    reservation.admitted_at_unix_secs,
+                                    None,
+                                )),
+                                UsagePolicyCostReservationState::Reserved
+                                    if reservation.reservation_expires_at_unix_secs
+                                        > input.admitted_at_unix_secs =>
+                                {
+                                    Some((
+                                        reservation.reserved_cost_units,
+                                        reservation.admitted_at_unix_secs,
+                                        Some(reservation.reservation_expires_at_unix_secs),
+                                    ))
+                                }
+                                _ => None,
+                            }),
+                    ),
                 });
             }
         }
@@ -932,6 +958,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 window_index: 1,
                 used_cost_units: 30,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -953,6 +980,7 @@ mod usage_policy_cost_tests {
             repo.reserve_usage_policy_cost(over).await.unwrap(),
             ReserveUsagePolicyCostOutcome::Rejected {
                 used_cost_units: 100,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -979,6 +1007,7 @@ mod usage_policy_cost_tests {
             reservation_expires_at_unix_secs: admitted_at + 86_400,
             retain_until_unix_secs: admitted_at + 32 * 86_400,
             windows: vec![UsagePolicyCostWindow {
+                rolling_seconds: None,
                 models: None,
                 model: None,
                 window_id: "rolling-5h".to_string(),
@@ -1000,6 +1029,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 limit_cost_units: 0,
                 used_cost_units: 0,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -1011,6 +1041,46 @@ mod usage_policy_cost_tests {
                 .unwrap(),
             ReserveUsagePolicyCostOutcome::Allowed {
                 reserved_cost_units: 0,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn rolling_cost_rejection_reports_ledger_expiry() {
+        let repository = InMemorySettlementRepository::default();
+        let mut active = reserve("active", 20_000, 90, 100);
+        active.reservation_expires_at_unix_secs = 20_010;
+        repository.reserve_usage_policy_cost(active).await.unwrap();
+        let mut next = reserve("next", 20_001, 20, 100);
+        next.windows[0].rolling_seconds = Some(18_000);
+        assert!(matches!(
+            repository
+                .reserve_usage_policy_cost(next.clone())
+                .await
+                .unwrap(),
+            ReserveUsagePolicyCostOutcome::Rejected {
+                used_cost_units: 90,
+                retry_after_secs: Some(9),
+                ..
+            }
+        ));
+        repository
+            .reconcile_usage_policy_cost(ReconcileUsagePolicyCostInput {
+                request_id: "active".into(),
+                subject_id: "user-1".into(),
+                reservation_token: "token-active".into(),
+                actual_cost_units: 90,
+                terminal_state: UsagePolicyCostReservationState::Finalized,
+                finalized_at_unix_secs: 20_002,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            repository.reserve_usage_policy_cost(next).await.unwrap(),
+            ReserveUsagePolicyCostOutcome::Rejected {
+                used_cost_units: 90,
+                retry_after_secs: Some(18_000),
                 ..
             }
         ));
@@ -1047,6 +1117,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 window_index: 0,
                 used_cost_units: 60,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -1113,6 +1184,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 window_index: 0,
                 used_cost_units: 40,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -1131,6 +1203,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 window_index: 1,
                 used_cost_units: 80,
+                retry_after_secs: None,
                 ..
             }
         ));
@@ -1369,6 +1442,7 @@ mod usage_policy_cost_tests {
             ReserveUsagePolicyCostOutcome::Rejected {
                 window_index: 0,
                 used_cost_units: 10,
+                retry_after_secs: None,
                 ..
             }
         ));

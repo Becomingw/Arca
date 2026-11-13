@@ -176,6 +176,8 @@ struct RuntimeCostRule {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PlanUsagePolicyRejection {
+    pub(crate) used: Option<f64>,
+    pub(crate) estimated: Option<f64>,
     pub(crate) metric: &'static str,
     pub(crate) limit: f64,
     pub(crate) retry_after: u64,
@@ -344,18 +346,29 @@ async fn reserve_plan_usage_policy_cost_with_policy(
         ReserveUsagePolicyCostOutcome::Rejected {
             window_index,
             limit_cost_units,
-            ..
+            used_cost_units,
+            retry_after_secs,
         } => {
             let rule = runtime_rules.get(window_index).ok_or_else(|| {
                 GatewayError::Internal(
                     "usage policy cost reservation returned an invalid window index".to_string(),
                 )
             })?;
+            warn!(
+                event_name = "plan_usage_cost_rejected",
+                used_cost_units,
+                reserved_cost_units,
+                limit_cost_units,
+                window = rule.label,
+                "request cost reservation exceeds the plan window"
+            );
             Ok(PlanUsageCostReservationOutcome::Rejected(
                 PlanUsagePolicyRejection {
+                    used: Some(used_cost_units as f64 / USAGE_POLICY_COST_UNITS_PER_USD as f64),
+                    estimated: Some(estimated_cost_usd),
                     metric: "actual_cost_usd",
                     limit: limit_cost_units as f64 / USAGE_POLICY_COST_UNITS_PER_USD as f64,
-                    retry_after: rule.retry_after,
+                    retry_after: retry_after_secs.unwrap_or(rule.retry_after),
                     window: rule.label,
                 },
             ))
@@ -575,6 +588,8 @@ async fn check_and_acquire_compiled_plan_usage_policy(
                 })?;
                 return Err(PlanUsageAdmissionError::Rejected(
                     PlanUsagePolicyRejection {
+                        used: None,
+                        estimated: None,
                         metric: "request_count",
                         limit: limit as f64,
                         retry_after: retry_after.min(rule.retry_after).max(1),
@@ -662,6 +677,8 @@ async fn check_and_acquire_compiled_plan_usage_policy(
                 })?;
                 return Err(PlanUsageAdmissionError::Rejected(
                     PlanUsagePolicyRejection {
+                        used: None,
+                        estimated: None,
                         metric: "request_count",
                         limit: limit_requests as f64,
                         retry_after: rule.retry_after,
@@ -1121,6 +1138,10 @@ fn runtime_cost_rule(
         usage_window_bounds(&rule.window, rule.entitlement_period, admitted_at_unix_secs)?;
     Ok(RuntimeCostRule {
         window: UsagePolicyCostWindow {
+            rolling_seconds: match rule.window {
+                UsagePolicyWindow::Rolling { seconds } => Some(seconds),
+                _ => None,
+            },
             model: rule.model.clone(),
             models: rule.models.clone(),
             window_id: format!("{}:{starts_at}", rule.identity),
