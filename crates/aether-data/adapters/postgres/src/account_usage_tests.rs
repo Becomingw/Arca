@@ -117,6 +117,7 @@ async fn personal_usage_ledger_isolation_expiry_models_and_boundaries() {
     let settlement = crate::settlement::SqlxSettlementRepository::new(pool.clone());
     let make_input = |index: usize, model: &str, amount: u64, family: bool| {
         let total = UsagePolicyCostWindow {
+            rolling_seconds: None,
             model: None,
             models: None,
             window_id: "total".into(),
@@ -127,6 +128,7 @@ async fn personal_usage_ledger_isolation_expiry_models_and_boundaries() {
         let mut checked = vec![total.clone()];
         if family {
             checked.push(UsagePolicyCostWindow {
+                rolling_seconds: None,
                 models: Some(vec!["fabel".into(), "other".into()]),
                 window_id: "family:shared".into(),
                 limit_cost_units: 30,
@@ -153,6 +155,7 @@ async fn personal_usage_ledger_isolation_expiry_models_and_boundaries() {
         ReserveUsagePolicyCostOutcome::Rejected {
             limit_cost_units: 0,
             used_cost_units: 0,
+            retry_after_secs: None,
             ..
         }
     ));
@@ -201,6 +204,7 @@ async fn personal_usage_ledger_isolation_expiry_models_and_boundaries() {
             .unwrap(),
         ReserveUsagePolicyCostOutcome::Rejected {
             used_cost_units: 100,
+            retry_after_secs: None,
             ..
         }
     ));
@@ -220,6 +224,30 @@ async fn personal_usage_ledger_isolation_expiry_models_and_boundaries() {
         rows, 4,
         "one durable charge per admitted request, not per pool"
     );
+    let mut rolling = make_input(102, "unrelated", 1, false);
+    rolling.windows[0].rolling_seconds = Some(50);
+    assert!(matches!(
+        settlement
+            .reserve_usage_policy_cost(rolling.clone())
+            .await
+            .unwrap(),
+        ReserveUsagePolicyCostOutcome::Rejected {
+            used_cost_units: 100,
+            retry_after_secs: Some(51),
+            ..
+        }
+    ));
+    // A pending reservation can expire before it slides out of the rolling window.
+    sqlx::query("UPDATE usage_cost_reservations SET reservation_expires_at=to_timestamp(155) WHERE subject_id='family-subject' AND model='unrelated'")
+        .execute(&pool).await.unwrap();
+    assert!(matches!(
+        settlement.reserve_usage_policy_cost(rolling).await.unwrap(),
+        ReserveUsagePolicyCostOutcome::Rejected {
+            used_cost_units: 100,
+            retry_after_secs: Some(5),
+            ..
+        }
+    ));
     pool.close().await;
     sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
         .execute(&setup)

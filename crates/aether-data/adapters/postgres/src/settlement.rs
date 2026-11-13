@@ -939,10 +939,55 @@ WHERE subject_id = $1
                             .checked_add(target_reserved_cost_units)
                             .is_none_or(|total| total > window.limit_cost_units)
                         {
+                            // Only inspect the release schedule on rejection, under the same
+                            // subject lock as admission. Ordinary successful requests keep the
+                            // aggregate query and do not materialize ledger rows.
+                            let mut entries = Vec::new();
+                            if window.rolling_seconds.is_some()
+                                && target_reserved_cost_units <= window.limit_cost_units
+                            {
+                                let rows = sqlx::query(r#"
+SELECT CASE WHEN state = 'finalized' THEN COALESCE(actual_cost_units, 0)
+            ELSE reserved_cost_units END AS cost,
+       EXTRACT(EPOCH FROM admitted_at)::BIGINT AS admitted,
+       CASE WHEN state = 'reserved' THEN EXTRACT(EPOCH FROM reservation_expires_at)::BIGINT
+            ELSE NULL END AS expires
+FROM usage_cost_reservations
+WHERE subject_id = $1
+  AND admitted_at >= TO_TIMESTAMP($2::double precision)
+  AND admitted_at < TO_TIMESTAMP($3::double precision)
+  AND (state = 'finalized' OR (state = 'reserved' AND reservation_expires_at > TO_TIMESTAMP($4::double precision)))
+  AND reservation_token <> $5
+  AND ($6::text IS NULL OR model = $6)
+  AND ($7::text[] IS NULL OR model = ANY($7))
+                                "#)
+                                    .bind(&input.subject_id)
+                                    .bind(window.starts_at_unix_secs as i64)
+                                    .bind(window.ends_at_unix_secs as i64)
+                                    .bind(input.admitted_at_unix_secs as i64)
+                                    .bind(&input.reservation_token)
+                                    .bind(&window.model)
+                                    .bind(&window.models)
+                                    .fetch_all(&mut **tx).await.map_postgres_err()?;
+                                for row in rows {
+                                    entries.push((
+                                        usage_policy_cost_u64(row.try_get("cost").map_postgres_err()?, "retry cost")?,
+                                        usage_policy_cost_u64(row.try_get("admitted").map_postgres_err()?, "retry admission")?,
+                                        row.try_get::<Option<i64>, _>("expires").map_postgres_err()?
+                                            .map(|value| usage_policy_cost_u64(value, "retry expiry")).transpose()?,
+                                    ));
+                                }
+                            }
                             return Ok(ReserveUsagePolicyCostOutcome::Rejected {
                                 window_index,
                                 limit_cost_units: window.limit_cost_units,
                                 used_cost_units,
+                                retry_after_secs: window.cost_retry_after(
+                                    input.admitted_at_unix_secs,
+                                    target_reserved_cost_units,
+                                    used_cost_units,
+                                    entries,
+                                ),
                             });
                         }
                     }

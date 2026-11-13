@@ -148,6 +148,9 @@ pub struct StoredUsagePolicyRequestAdmission {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UsagePolicyCostWindow {
+    /// Set only for rolling windows; fixed/calendar windows reset at their end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolling_seconds: Option<u64>,
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -156,6 +159,39 @@ pub struct UsagePolicyCostWindow {
     pub starts_at_unix_secs: u64,
     pub ends_at_unix_secs: u64,
     pub limit_cost_units: u64,
+}
+
+impl UsagePolicyCostWindow {
+    /// Earliest retry implied by the current ledger, assuming no new usage.
+    /// Entries are (cost, admission second, optional active reservation expiry).
+    /// A request larger than the entire limit cannot recover through waiting.
+    pub fn cost_retry_after(
+        &self,
+        now: u64,
+        requested: u64,
+        used: u64,
+        entries: impl IntoIterator<Item = (u64, u64, Option<u64>)>,
+    ) -> Option<u64> {
+        let seconds = self.rolling_seconds?;
+        let remaining = self.limit_cost_units.checked_sub(requested)?;
+        let mut releases = std::collections::BTreeMap::<u64, u64>::new();
+        for (cost, admitted, expires) in entries {
+            // Admission uses an inclusive lower bound, so the entry drops out
+            // one second after admitted + window, not at that boundary.
+            let leaves = admitted.saturating_add(seconds).saturating_add(1);
+            let leaves = expires.map_or(leaves, |expires| leaves.min(expires));
+            let amount = releases.entry(leaves).or_default();
+            *amount = amount.saturating_add(cost);
+        }
+        let mut outstanding = used;
+        for (leaves, released) in releases {
+            outstanding = outstanding.saturating_sub(released);
+            if outstanding <= remaining {
+                return Some(leaves.saturating_sub(now).max(1));
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -290,6 +326,8 @@ pub enum ReserveUsagePolicyCostOutcome {
         window_index: usize,
         limit_cost_units: u64,
         used_cost_units: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry_after_secs: Option<u64>,
     },
     AlreadyTerminal {
         state: UsagePolicyCostReservationState,
@@ -595,6 +633,29 @@ mod tests {
     }
 
     #[test]
+    fn rolling_cost_retry_waits_until_sufficient_cost_leaves() {
+        let window = UsagePolicyCostWindow {
+            rolling_seconds: Some(100),
+            model: None,
+            models: None,
+            window_id: "test".into(),
+            starts_at_unix_secs: 100,
+            ends_at_unix_secs: 201,
+            limit_cost_units: 100,
+        };
+        let entries = [(10, 100, None), (30, 130, None), (50, 190, Some(210))];
+        // First 10 units leave at 201, but 40 units must leave before admitting 50.
+        assert_eq!(window.cost_retry_after(200, 50, 90, entries), Some(10));
+        assert_eq!(window.cost_retry_after(200, 20, 90, entries), Some(1));
+        assert_eq!(window.cost_retry_after(200, 101, 90, entries), None);
+        let fixed = UsagePolicyCostWindow {
+            rolling_seconds: None,
+            ..window
+        };
+        assert_eq!(fixed.cost_retry_after(200, 50, 90, entries), None);
+    }
+
+    #[test]
     fn wallet_settlement_values_reject_corruption_and_overflow() {
         assert!(validate_wallet_settlement_values(-3.0, 0.0, 12.0, 1.0).is_ok());
         for (recharge, gift, consumed, additional) in [
@@ -654,6 +715,7 @@ mod tests {
             reservation_expires_at_unix_secs: 150,
             retain_until_unix_secs: 200,
             windows: vec![UsagePolicyCostWindow {
+                rolling_seconds: None,
                 model: None,
                 models: None,
                 window_id: "window-1".to_string(),

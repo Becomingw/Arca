@@ -431,6 +431,8 @@ async fn calculate_execution_plan_cost_upper_bound(
             usage_policy_default_output_tokens_from_env(),
         ))
     };
+    let input_tokens = configured_token_limit(&context, "context_limit")
+        .map_or(input_tokens, |limit| input_tokens.min(limit));
     let mut estimate =
         aether_billing::BillingAuthorizationEstimateInput::new(task_type, input_tokens);
     estimate.api_format = Some(api_format.to_string());
@@ -579,13 +581,20 @@ fn default_reserved_output_tokens(
 fn configured_output_limit(
     context: &aether_data_contracts::repository::billing::StoredBillingModelContext,
 ) -> Option<i64> {
+    configured_token_limit(context, "output_limit")
+}
+
+fn configured_token_limit(
+    context: &aether_data_contracts::repository::billing::StoredBillingModelContext,
+    field: &str,
+) -> Option<i64> {
     [
         context.model_config.as_ref(),
         context.global_model_config.as_ref(),
     ]
     .into_iter()
     .flatten()
-    .filter_map(|config| config.get("output_limit"))
+    .filter_map(|config| config.get(field))
     .filter_map(serde_json::Value::as_i64)
     .find(|limit| *limit > 0)
 }
@@ -1333,9 +1342,18 @@ fn has_reference_value(value: &serde_json::Value) -> bool {
     }
 }
 
-fn json_token_count_upper_bound(value: &serde_json::Value) -> u64 {
+fn json_input_token_estimate(value: &serde_json::Value) -> u64 {
+    // This is an admission estimate, not a tokenizer or a billing measurement.
+    // ASCII prose/code averages several bytes per token. Reserve one token per
+    // four ASCII bytes and one per two UTF-8 bytes for multilingual content.
+    // Counting every JSON byte as a token spuriously crossed long-context tiers.
+    // Actual upstream usage continues to determine settlement.
     serde_json::to_vec(value)
-        .map(|bytes| u64::try_from(bytes.len()).unwrap_or(u64::MAX))
+        .map(|bytes| {
+            let ascii = bytes.iter().filter(|byte| byte.is_ascii()).count() as u64;
+            let non_ascii = bytes.len() as u64 - ascii;
+            ascii.div_ceil(4).saturating_add(non_ascii.div_ceil(2))
+        })
         .unwrap_or(u64::MAX)
 }
 
@@ -1351,14 +1369,15 @@ fn request_input_token_count_policy_bound_with(
     // Media payloads (base64 data URIs, URLs) are replaced by a fixed per-part bound instead
     // of being counted byte-for-byte, so a single image neither costs millions of tokens nor
     // is dropped from the estimate.
-    let mut media_bytes = 0_u64;
+    let mut media_estimate = 0_u64;
     let mut media_reserved = 0_u64;
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         match value {
             serde_json::Value::Object(object) => {
                 if let Some(kind) = media_part_kind(object) {
-                    media_bytes = media_bytes.saturating_add(json_token_count_upper_bound(value));
+                    media_estimate =
+                        media_estimate.saturating_add(json_input_token_estimate(value));
                     media_reserved = media_reserved.saturating_add(media_tokens(kind));
                     continue;
                 }
@@ -1368,8 +1387,8 @@ fn request_input_token_count_policy_bound_with(
                         "inlineData" | "inline_data" | "fileData" | "file_data"
                     ) {
                         if let Some(inline) = child.as_object() {
-                            media_bytes =
-                                media_bytes.saturating_add(json_token_count_upper_bound(child));
+                            media_estimate =
+                                media_estimate.saturating_add(json_input_token_estimate(child));
                             media_reserved = media_reserved
                                 .saturating_add(media_tokens(gemini_inline_media_kind(inline)));
                             continue;
@@ -1382,11 +1401,11 @@ fn request_input_token_count_policy_bound_with(
             _ => {}
         }
     }
-    let bytes = json_token_count_upper_bound(value)
-        .saturating_sub(media_bytes)
+    let tokens = json_input_token_estimate(value)
+        .saturating_sub(media_estimate)
         .saturating_add(media_reserved);
     if api_format != "claude:messages" {
-        return bytes;
+        return tokens;
     }
     let mut nodes = 0_u64;
     let mut pending = vec![value];
@@ -1402,7 +1421,7 @@ fn request_input_token_count_policy_bound_with(
         .get("tools")
         .and_then(serde_json::Value::as_array)
         .map_or(0, |tools| u64::try_from(tools.len()).unwrap_or(u64::MAX));
-    claude_framed_input_policy_bound(bytes, nodes, tools)
+    claude_framed_input_policy_bound(tokens, nodes, tools)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3158,6 +3177,60 @@ mod tests {
         assert!((1000 + 200 + 3000..20_000).contains(&bound), "{bound}");
     }
 
+    #[tokio::test]
+    async fn long_context_reservation_does_not_price_json_bytes_as_tokens() {
+        let mut context = billing_context_with_pricing(
+            Some(json!({"tiers": [
+                {"up_to": 272000, "input_price_per_1m": 2.5, "output_price_per_1m": 10.0,
+                 "cache_creation_price_per_1m": 3.125, "cache_read_price_per_1m": 0.25},
+                {"up_to": null, "input_price_per_1m": 4.0, "output_price_per_1m": 15.0,
+                 "cache_creation_price_per_1m": 5.0, "cache_read_price_per_1m": 0.4}
+            ]})),
+            None,
+            None,
+            None,
+        );
+        context.global_model_config = Some(json!({"context_limit": 1000000}));
+        context.model_config = Some(json!({"context_limit": 200000}));
+        let state = state_with_quota_and_wallet(quota_availability(7.0, false), context);
+        for (format, body) in [
+            (
+                "openai:responses",
+                json!({"input": "word ".repeat(180000), "max_output_tokens": 4096}),
+            ),
+            (
+                "openai:chat",
+                json!({"messages": [{"role":"user", "content":"word ".repeat(180000)}], "max_tokens": 4096}),
+            ),
+        ] {
+            let tokens = super::request_input_token_count_policy_bound(format, &body);
+            assert!((225000..226000).contains(&tokens));
+            let cost = super::estimate_execution_plan_cost_upper_bound_usd_inner(
+                &state,
+                &execution_plan(body, format),
+                Some(&billing_report_context()),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!((cost - 0.54096).abs() < 1e-8, "{cost}");
+            assert!(2.64 + cost < 7.0, "the incident must remain admissible");
+        }
+    }
+
+    #[test]
+    fn input_estimate_keeps_multilingual_content_and_tool_schemas() {
+        let plain = json!({"input": "hello world ".repeat(1000)});
+        let chinese = json!({"input": "中文测试".repeat(1000)});
+        let tools = json!({"input": plain["input"], "tools": [{"type":"function",
+            "name":"lookup", "description":"large schema ".repeat(1000), "parameters":{"type":"object"}}]});
+        let estimate =
+            |body| super::request_input_token_count_policy_bound("openai:responses", body);
+        assert!((3000..3100).contains(&estimate(&plain)));
+        assert!((6000..6100).contains(&estimate(&chinese)));
+        assert!(estimate(&tools) > estimate(&plain) + 3000);
+    }
+
     #[test]
     fn hosted_tools_and_stored_files_get_a_fixed_cost_estimate() {
         use super::HostedToolKind::{ImageGeneration, Other, WebSearch};
@@ -3316,8 +3389,8 @@ mod tests {
     fn claude_input_policy_includes_framing_tools_and_structural_margins() {
         let plain = claude_text_request();
         let tools = claude_tool_request();
-        let plain_bytes = super::json_token_count_upper_bound(&plain);
-        let tool_bytes = super::json_token_count_upper_bound(&tools);
+        let plain_bytes = super::json_input_token_estimate(&plain);
+        let tool_bytes = super::json_input_token_estimate(&tools);
         let plain_bound = super::request_input_token_count_policy_bound("claude:messages", &plain);
         let tool_bound = super::request_input_token_count_policy_bound("claude:messages", &tools);
         assert!(plain_bound > plain_bytes + 4096);

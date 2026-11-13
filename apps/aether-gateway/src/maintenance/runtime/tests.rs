@@ -679,6 +679,7 @@ async fn automatic_usage_cleanup_collects_ledgers_when_usage_cleanup_is_disabled
             reservation_expires_at_unix_secs: 2,
             retain_until_unix_secs: 2,
             windows: vec![UsagePolicyCostWindow {
+                rolling_seconds: None,
                 models: None,
                 model: None,
                 window_id: "expired-window".to_string(),

@@ -458,6 +458,8 @@ mod tests {
     #[test]
     fn plan_usage_limit_uses_http_429_and_retry_later_close_code() {
         let error = GatewayError::PlanUsageLimited(PlanUsagePolicyRejection {
+            used: None,
+            estimated: None,
             metric: "actual_cost_usd",
             limit: 10.0,
             retry_after: 60,

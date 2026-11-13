@@ -327,6 +327,8 @@ pub(crate) fn build_local_plan_usage_limited_response(
             "message": message,
             "details": {
                 "metric": rejection.metric,
+                "used": rejection.used,
+                "estimated": rejection.estimated,
                 "window": rejection.window,
                 "limit": rejection.limit,
                 "retry_after": rejection.retry_after,
@@ -855,6 +857,8 @@ mod tests {
             "trace-plan-limit",
             None,
             &PlanUsagePolicyRejection {
+                used: None,
+                estimated: None,
                 metric: "request_count",
                 limit: 100.0,
                 retry_after: 42,
@@ -868,5 +872,26 @@ mod tests {
         assert_eq!(response.headers()["x-ratelimit-window"], "calendar_week");
         let payload = response_json(response).await;
         assert_eq!(payload["error"]["type"], "plan_usage_limit_exceeded");
+    }
+
+    #[tokio::test]
+    async fn cost_rejection_exposes_used_and_estimated_amounts() {
+        let response = build_local_plan_usage_limited_response(
+            "trace-cost-limit",
+            None,
+            &PlanUsagePolicyRejection {
+                used: Some(6.8),
+                estimated: Some(0.55),
+                metric: "actual_cost_usd",
+                limit: 7.0,
+                retry_after: 65,
+                window: "rolling_5h",
+            },
+        )
+        .unwrap();
+        assert_eq!(response.headers()["retry-after"], "65");
+        let payload = response_json(response).await;
+        assert_eq!(payload["error"]["details"]["used"], 6.8);
+        assert_eq!(payload["error"]["details"]["estimated"], 0.55);
     }
 }
