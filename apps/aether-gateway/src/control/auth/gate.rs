@@ -1343,6 +1343,10 @@ fn has_reference_value(value: &serde_json::Value) -> bool {
 }
 
 fn json_input_token_estimate(value: &serde_json::Value) -> u64 {
+    json_input_token_estimate_with_rounding(value, true)
+}
+
+fn json_input_token_estimate_with_rounding(value: &serde_json::Value, round_up: bool) -> u64 {
     // This is an admission estimate, not a tokenizer or a billing measurement.
     // ASCII prose/code averages several bytes per token. Reserve one token per
     // four ASCII bytes and one per two UTF-8 bytes for multilingual content.
@@ -1352,7 +1356,12 @@ fn json_input_token_estimate(value: &serde_json::Value) -> u64 {
         .map(|bytes| {
             let ascii = bytes.iter().filter(|byte| byte.is_ascii()).count() as u64;
             let non_ascii = bytes.len() as u64 - ascii;
-            ascii.div_ceil(4).saturating_add(non_ascii.div_ceil(2))
+            if round_up {
+                ascii.div_ceil(4).saturating_add(non_ascii.div_ceil(2))
+            } else {
+                // Round removed media down to retain surrounding text/framing.
+                (ascii / 4).saturating_add(non_ascii / 2)
+            }
         })
         .unwrap_or(u64::MAX)
 }
@@ -1376,8 +1385,8 @@ fn request_input_token_count_policy_bound_with(
         match value {
             serde_json::Value::Object(object) => {
                 if let Some(kind) = media_part_kind(object) {
-                    media_estimate =
-                        media_estimate.saturating_add(json_input_token_estimate(value));
+                    media_estimate = media_estimate
+                        .saturating_add(json_input_token_estimate_with_rounding(value, false));
                     media_reserved = media_reserved.saturating_add(media_tokens(kind));
                     continue;
                 }
@@ -1387,8 +1396,9 @@ fn request_input_token_count_policy_bound_with(
                         "inlineData" | "inline_data" | "fileData" | "file_data"
                     ) {
                         if let Some(inline) = child.as_object() {
-                            media_estimate =
-                                media_estimate.saturating_add(json_input_token_estimate(child));
+                            media_estimate = media_estimate.saturating_add(
+                                json_input_token_estimate_with_rounding(child, false),
+                            );
                             media_reserved = media_reserved
                                 .saturating_add(media_tokens(gemini_inline_media_kind(inline)));
                             continue;
@@ -2969,7 +2979,7 @@ mod tests {
             estimate_from_billing_context(&context, "openai:chat", 1_000_000, Some(1_000_000))
                 .expect("estimate should be bounded");
 
-        assert_eq!(estimate, 18.75);
+        assert_eq!(estimate, 18.0);
     }
 
     #[test]
@@ -2991,7 +3001,7 @@ mod tests {
             estimate_from_billing_context(&context, "openai:chat", 1_000_000, Some(1_000_000))
                 .expect("estimate should be bounded");
 
-        assert_eq!(estimate, 6.5);
+        assert_eq!(estimate, 6.0);
     }
 
     #[test]
