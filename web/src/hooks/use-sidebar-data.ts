@@ -78,11 +78,13 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             title: t('Overview'),
             url: '/dashboard/overview',
             icon: Activity,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Dashboard'),
             url: '/dashboard/models',
             icon: LayoutDashboard,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('API Keys'),

@@ -431,7 +431,7 @@ async function logout() {
         </a>
       </nav>
       <div class="sidebar-bottom">
-        <a href="/dashboard"><ArrowUpRight :size="17" /> New API 控制台</a>
+        <a v-if="viewer.role >= 10" href="/dashboard"><ArrowUpRight :size="17" /> New API 管理后台</a>
         <button type="button" @click="logout"><LogOut :size="17" /> 退出登录</button>
       </div>
     </aside>
