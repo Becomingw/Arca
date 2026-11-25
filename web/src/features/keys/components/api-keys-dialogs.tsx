@@ -35,6 +35,7 @@ export function ApiKeysDialogs() {
       <CCSwitchDialog
         open={open === 'cc-switch'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        tokenId={currentRow?.id}
         tokenKey={resolvedKey}
       />
     </>

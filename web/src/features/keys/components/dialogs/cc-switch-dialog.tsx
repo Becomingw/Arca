@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useId, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -51,6 +51,11 @@ const APP_CONFIGS = {
     defaultName: 'My Gemini',
     modelFields: [{ key: 'model', labelKey: 'Primary Model', required: true }],
   },
+  opencode: {
+    label: 'OpenCode',
+    defaultName: 'Arca',
+    modelFields: [{ key: 'model', labelKey: 'Primary Model', required: true }],
+  },
 } as const
 
 type AppType = keyof typeof APP_CONFIGS
@@ -72,32 +77,92 @@ function buildCCSwitchURL(
   app: string,
   name: string,
   models: Record<string, string>,
-  apiKey: string
+  apiKey: string,
+  openCodeEndpoint?: string
 ): string {
   const serverAddress = getServerAddress()
-  const endpoint = app === 'codex' ? `${serverAddress}/v1` : serverAddress
+  let endpoint = serverAddress
+  if (openCodeEndpoint) endpoint = openCodeEndpoint
+  if (app === 'codex') endpoint = `${serverAddress}/v1`
   const params = new URLSearchParams()
   params.set('resource', 'provider')
   params.set('app', app)
+  if (app === 'opencode') params.set('apiFormat', 'openai_chat')
   params.set('name', name)
   params.set('endpoint', endpoint)
   params.set('apiKey', apiKey)
   for (const [k, v] of Object.entries(models)) {
     if (v) params.set(k, v)
   }
-  params.set('homepage', serverAddress)
+  params.set(
+    'homepage',
+    openCodeEndpoint?.replace(/\/v1$/, '') ?? serverAddress
+  )
   params.set('enabled', 'true')
   return `ccswitch://v1/import?${params.toString()}`
+}
+
+interface OpenCodeCatalog {
+  endpoint: string
+  models: string[]
+}
+
+async function loadOpenCodeCatalog(
+  tokenKey: string,
+  signal: AbortSignal
+): Promise<OpenCodeCatalog> {
+  // This endpoint uses the selected inference key. The dashboard client
+  // would substitute its browser access token.
+  const response = await fetch('/api/opencode/config', {
+    headers: { Authorization: `Bearer ${tokenKey}` },
+    credentials: 'omit',
+    cache: 'no-store',
+    redirect: 'error',
+    signal,
+  })
+  if (!response.ok) throw new Error('Failed to load models')
+  const data = (await response.json()) as {
+    provider?: {
+      aether?: { options?: { baseURL?: unknown }; models?: unknown }
+    }
+  } | null
+  const provider = data?.provider?.aether
+  const endpoint = provider?.options?.baseURL
+  const models = provider?.models
+  if (
+    typeof endpoint !== 'string' ||
+    !models ||
+    typeof models !== 'object' ||
+    Array.isArray(models)
+  ) {
+    throw new Error('Failed to load models')
+  }
+  const url = new URL(endpoint)
+  if (
+    !['https:', 'http:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('Failed to load models')
+  }
+  return { endpoint: url.href, models: Object.keys(models) }
 }
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   tokenKey: string
+  tokenId?: number
 }
 
 export function CCSwitchDialog(props: Props) {
   const { t } = useTranslation()
+  const dialogId = useId()
+  const apiKey = props.tokenKey.startsWith('sk-')
+    ? props.tokenKey
+    : `sk-${props.tokenKey}`
   const [app, setApp] = useState<AppType>('claude')
   const [name, setName] = useState<string>(APP_CONFIGS.claude.defaultName)
   const [models, setModels] = useState<Record<string, string>>({})
@@ -105,14 +170,28 @@ export function CCSwitchDialog(props: Props) {
   const { data: modelsData } = useQuery({
     queryKey: ['user-models-ccswitch'],
     queryFn: async () => requireServerSuccess(await getUserModels()),
-    enabled: props.open,
+    enabled: props.open && app !== 'opencode',
     staleTime: 5 * 60 * 1000,
   })
 
+  const openCodeCatalog = useQuery({
+    // Tie the query to this dialog and key record, without retaining the
+    // key itself as a TanStack cache key or devtools identifier.
+    queryKey: ['cc-switch-opencode-models', dialogId, props.tokenId],
+    queryFn: ({ signal }) => loadOpenCodeCatalog(apiKey, signal),
+    enabled: props.open && app === 'opencode' && Boolean(props.tokenKey),
+    gcTime: 0,
+    refetchOnMount: 'always',
+    retry: false,
+    meta: { errorToast: false },
+  })
   const modelOptions = useMemo(() => {
-    const items = modelsData?.data ?? []
+    const items =
+      app === 'opencode'
+        ? (openCodeCatalog.data?.models ?? [])
+        : (modelsData?.data ?? [])
     return items.map((m) => ({ value: m, label: m }))
-  }, [modelsData?.data])
+  }, [app, modelsData?.data, openCodeCatalog.data?.models])
 
   useEffect(() => {
     if (props.open) {
@@ -139,10 +218,28 @@ export function CCSwitchDialog(props: Props) {
       toast.warning(t('Please select a primary model'))
       return
     }
-    const key = props.tokenKey.startsWith('sk-')
-      ? props.tokenKey
-      : `sk-${props.tokenKey}`
-    const url = buildCCSwitchURL(app, name, models, key)
+    let endpoint: string | undefined
+    if (app === 'opencode') {
+      const catalog = openCodeCatalog.data
+      if (
+        openCodeCatalog.isFetching ||
+        openCodeCatalog.isError ||
+        !catalog?.models.includes(models.model)
+      ) {
+        toast.warning(t('Please select a primary model'))
+        return
+      }
+      if (
+        [name, apiKey, catalog.endpoint, models.model].some((value) =>
+          /\$\{|\{env:|\{file:/.test(value)
+        )
+      ) {
+        toast.warning(t('Invalid parameters'))
+        return
+      }
+      endpoint = catalog.endpoint
+    }
+    const url = buildCCSwitchURL(app, name, models, apiKey, endpoint)
     window.open(url, '_blank')
     props.onOpenChange(false)
   }
@@ -160,7 +257,15 @@ export function CCSwitchDialog(props: Props) {
           <Button variant='outline' onClick={() => props.onOpenChange(false)}>
             {t('Cancel')}
           </Button>
-          <Button onClick={handleSubmit}>{t('Open CC Switch')}</Button>
+          <Button
+            disabled={
+              app === 'opencode' &&
+              (openCodeCatalog.isFetching || openCodeCatalog.isError)
+            }
+            onClick={handleSubmit}
+          >
+            {t('Open CC Switch')}
+          </Button>
         </>
       }
     >
@@ -170,7 +275,7 @@ export function CCSwitchDialog(props: Props) {
           <RadioGroup
             value={app}
             onValueChange={handleAppChange}
-            className='flex gap-4'
+            className='flex flex-wrap gap-4'
           >
             {(
               Object.entries(APP_CONFIGS) as [
@@ -198,6 +303,11 @@ export function CCSwitchDialog(props: Props) {
           />
         </div>
 
+        {app === 'opencode' && openCodeCatalog.isError && (
+          <p role='alert' className='text-destructive text-sm'>
+            {t('Failed to load models')}
+          </p>
+        )}
         {currentConfig.modelFields.map((field) => (
           <div key={field.key} className='space-y-2'>
             <Label htmlFor={`cc-switch-${field.key}`} required={field.required}>

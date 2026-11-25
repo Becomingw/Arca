@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -642,11 +643,15 @@ func GetUserModels(c *gin.Context) {
 			groupsToQuery = []string{group}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    service.GetGroupsEnabledModels(groupsToQuery),
+	access, err := model.ArcaRuntimeModelAccess(c.Request.Context(), id)
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Database error, please contact the administrator"))
+		return
+	}
+	models := slices.DeleteFunc(service.GetGroupsEnabledModels(groupsToQuery), func(name string) bool {
+		return !access.Allows(name)
 	})
+	common.ApiSuccess(c, models)
 }
 
 func UpdateUser(c *gin.Context) {

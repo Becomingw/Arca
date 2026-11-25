@@ -51,6 +51,12 @@ func Distribute() func(c *gin.Context) {
 			return
 		}
 		_, pinned, _ := constraints.ResolvedPin()
+		if shouldSelectChannel || pinned {
+			if policyErr := service.CheckArcaRelayEntitlement(c, modelRequest.Model); policyErr != nil {
+				abortWithOpenAiMessage(c, policyErr.StatusCode, policyErr.Error(), policyErr.GetErrorCode())
+				return
+			}
+		}
 		if !pinned {
 			// Select a channel for the user
 			// check token model mapping

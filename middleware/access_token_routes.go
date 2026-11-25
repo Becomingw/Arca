@@ -58,6 +58,29 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/verify/methods":             accessTokenAnyRule,
 	"POST /api/verify":                    accessTokenAnyRule,
 
+	// router/api-router.go: Arca
+	"GET /api/arca/feedback":                         accessTokenSessionRule,
+	"POST /api/arca/feedback":                        accessTokenSessionRule,
+	"GET /api/arca/feedback/:id":                     accessTokenSessionRule,
+	"POST /api/arca/feedback/:id/commands":           accessTokenSessionRule,
+	"GET /api/arca/feedback/notifications":           accessTokenSessionRule,
+	"POST /api/arca/feedback/notifications/read":     accessTokenSessionRule,
+	"GET /api/arca/requests/:request_id/diagnostics": accessTokenSessionRule,
+
+	"GET /api/arca/profile":           accessTokenSessionRule,
+	"PUT /api/arca/profile/privacy":   accessTokenSessionRule,
+	"PUT /api/arca/profile/avatar":    accessTokenSessionRule,
+	"DELETE /api/arca/profile/avatar": accessTokenSessionRule,
+	"GET /api/arca/profile/heatmap":   accessTokenSessionRule,
+	"GET /api/arca/team-activity":     accessTokenSessionRule,
+	"GET /api/arca/avatars":           accessTokenSessionRule,
+
+	"GET /api/arca/feedback/mentionable":        accessTokenSessionRule,
+	"GET /api/arca/entitlements/me":             accessTokenSessionRule,
+	"GET /api/arca/admin/entitlements":          accessTokenSessionRule,
+	"PUT /api/arca/admin/entitlements":          accessTokenSessionRule,
+	"POST /api/arca/admin/entitlements/preview": accessTokenSessionRule,
+
 	// router/api-router.go: /api/user (self)
 	"GET /api/user/sessions":                       accessTokenSessionRule,
 	"DELETE /api/user/sessions/:sid":               accessTokenSessionRule,

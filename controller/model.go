@@ -230,7 +230,7 @@ func getModelListGroups(c *gin.Context) (modelListGroups, error) {
 	}, nil
 }
 
-func ListModels(c *gin.Context, modelType int) {
+func filterRelayModelNames(c *gin.Context, models []string) ([]string, error) {
 	acceptUnsetRatioModel := operation_setting.SelfUseModeEnabled
 	if !acceptUnsetRatioModel {
 		userId := c.GetInt("id")
@@ -242,16 +242,7 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	}
 
-	userModelNames := make([]string, 0)
-	groups, err := getModelListGroups(c)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "get user group failed",
-		})
-		return
-	}
-	ownerGroups := groups.ownerGroups
+	userModelNames := make([]string, 0, len(models))
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var tokenModelLimit map[string]bool
 	if modelLimitEnable {
@@ -263,7 +254,6 @@ func ListModels(c *gin.Context, modelType int) {
 			tokenModelLimit = map[string]bool{}
 		}
 	}
-	models := service.GetGroupsEnabledModels(ownerGroups)
 	for _, modelName := range models {
 		if modelLimitEnable {
 			matchingName := ratio_setting.RoutingMatchModelName(modelName)
@@ -275,6 +265,31 @@ func ListModels(c *gin.Context, modelType int) {
 			continue
 		}
 		userModelNames = append(userModelNames, modelName)
+	}
+
+	access, err := model.ArcaRuntimeModelAccess(c.Request.Context(), c.GetInt("id"))
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(userModelNames, func(name string) bool {
+		return !access.Allows(name)
+	}), nil
+}
+
+func ListModels(c *gin.Context, modelType int) {
+	groups, err := getModelListGroups(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "get user group failed",
+		})
+		return
+	}
+	ownerGroups := groups.ownerGroups
+	userModelNames, err := filterRelayModelNames(c, service.GetGroupsEnabledModels(ownerGroups))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "catalog_unavailable"}})
+		return
 	}
 
 	ownerByModel := map[string]string{}

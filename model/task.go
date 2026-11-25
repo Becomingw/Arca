@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,6 +14,8 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+
+	"gorm.io/gorm"
 )
 
 type TaskStatus string
@@ -116,6 +119,8 @@ type TaskPrivateData struct {
 	// Execution records safe, immutable request provenance. It lives next to
 	// other private task state so public task DTOs cannot expose it by accident.
 	Execution *TaskExecutionSnapshot `json:"execution,omitempty"`
+	// ArcaBudgetTracked links this task to the organization ledger via Execution.RequestID.
+	ArcaBudgetTracked bool `json:"arca_budget_tracked,omitempty"`
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -520,12 +525,26 @@ func (Task *Task) Insert() error {
 // InsertWithContext creates the row. omitColumns are left out of the INSERT
 // (for example "data" when the submit route discards the upstream snapshot)
 // while the in-memory task keeps its values for presentation.
-func (Task *Task) InsertWithContext(ctx context.Context, omitColumns ...string) error {
-	tx := DB.WithContext(ctx)
-	if len(omitColumns) > 0 {
-		tx = tx.Omit(omitColumns...)
+func (t *Task) InsertWithContext(ctx context.Context, omitColumns ...string) error {
+	insert := func(db *gorm.DB) error {
+		if len(omitColumns) > 0 {
+			db = db.Omit(omitColumns...)
+		}
+		return db.Create(t).Error
 	}
-	return tx.Create(Task).Error
+
+	db := DB.WithContext(ctx)
+	if !t.PrivateData.ArcaBudgetTracked || (t.Status != TaskStatusSuccess && t.Status != TaskStatusFailure) {
+		return insert(db)
+	}
+	// Submission already knows the charged quota for an inline terminal
+	// result. Persist it together with the task, before downstream settlement.
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := insert(tx); err != nil {
+			return err
+		}
+		return t.settleArcaBudget(tx, &t.Quota)
+	})
 }
 
 type taskSnapshot struct {
@@ -586,11 +605,44 @@ func (t *Task) UpdateQuota() error {
 // falls back to INSERT ON CONFLICT when the WHERE-guarded UPDATE matches
 // zero rows, which silently bypasses the CAS guard.
 func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
-	result := DB.Model(t).Where("status = ?", fromStatus).Select("*").Updates(t)
+	return t.updateWithStatus(DB, fromStatus)
+}
+
+func (t *Task) updateWithStatus(db *gorm.DB, fromStatus TaskStatus) (bool, error) {
+	result := db.Model(t).Where("status = ?", fromStatus).Select("*").Updates(t)
 	if result.Error != nil {
 		return false, result.Error
 	}
 	return result.RowsAffected > 0, nil
+}
+
+// UpdateWithStatusAndArcaBudget applies a terminal task transition and its
+// already computed organization quote in one transaction. A nil quote is an
+// explicit policy refund. Ordinary wallet and token operations remain with
+// the native CAS winner after this transaction.
+func (t *Task) UpdateWithStatusAndArcaBudget(ctx context.Context, fromStatus TaskStatus, quota *int) (bool, error) {
+	if !t.PrivateData.ArcaBudgetTracked {
+		return t.UpdateWithStatus(fromStatus)
+	}
+
+	var won bool
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		won, err = t.updateWithStatus(tx, fromStatus)
+		if err != nil || !won {
+			return err
+		}
+		return t.settleArcaBudget(tx, quota)
+	})
+	return won && err == nil, err
+}
+
+func (t *Task) settleArcaBudget(tx *gorm.DB, quota *int) error {
+	if t.PrivateData.Execution == nil {
+		return fmt.Errorf("organization-funded task is missing billing provenance")
+	}
+	return updateArcaBudgetSettlementInDB(tx, t.UserId, t.PrivateData.Execution.RequestID, quota,
+		[]string{arcaBudgetPending, arcaBudgetSettled}, true)
 }
 
 // TaskBulkUpdateByID performs an unconditional bulk UPDATE by primary key IDs.

@@ -78,3 +78,14 @@ export function sanitizeAuthRedirect(
 
   return `${redirectURL.pathname}${redirectURL.search}${redirectURL.hash}`
 }
+
+// Arca is served by a different embedded console. Let the server load its
+// document instead of passing its path to the New API client-side router.
+export function authRedirectOptions(href: string) {
+  const path = href.split(/[?#]/, 1)[0]
+  return {
+    href,
+    replace: true,
+    reloadDocument: path === '/arca' || path.startsWith('/arca/'),
+  }
+}

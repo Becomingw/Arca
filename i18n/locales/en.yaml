@@ -97,3 +97,6 @@ channel.upstream_update_failed_channels: "Failed channel IDs (showing {{.Shown}}
 channel.upstream_update_more_omitted: " ({{.Count}} more omitted)"
 
 channel.notify_scheduled_subject: "Channel \"{{.Name}}\" (#{{.Id}}) plugin notification"
+
+arca.feedback_mention_title: "You were mentioned in Arca feedback"
+arca.feedback_mention_content: "Sign in to Arca to read the discussion."

@@ -376,6 +376,15 @@ func migrateDB() error {
 		&CasbinRule{},
 		&AuthzRole{},
 		&UserAccessToken{},
+		&ArcaFeedbackIssue{},
+		&ArcaFeedbackEvent{},
+		&ArcaFeedbackNotification{},
+		&ArcaProfile{},
+		&ArcaActivityWindow{},
+		&ArcaEntitlementPolicyRow{},
+		&ArcaBudgetAccount{},
+		&ArcaBudgetReservation{},
+		&ArcaMCPConfirmation{},
 	)
 	if err != nil {
 		return err

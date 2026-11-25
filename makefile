@@ -1,4 +1,5 @@
 WEB_DIR = ./web
+ARCA_WEB_DIR = ./web-arca
 API_DIR = .
 DEV_WEB_PORT ?= 5173
 DEV_COMPOSE_FILE = docker-compose.dev.yml
@@ -18,6 +19,8 @@ build-web:
 	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$$(cat ../VERSION) bun run build
 
 build-all-web: build-web
+	@cd $(ARCA_WEB_DIR) && bun install --frozen-lockfile
+	@cd $(ARCA_WEB_DIR) && bun run build
 
 start-api:
 	@echo "Starting api dev server..."

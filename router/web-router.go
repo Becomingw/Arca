@@ -2,6 +2,7 @@ package router
 
 import (
 	"embed"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -21,6 +22,7 @@ type WebAssets struct {
 func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.HandlerFunc) {
 	frontendFS := common.EmbedFolder(assets.BuildFS, "web/dist")
 	compress := gzip.Gzip(gzip.DefaultCompression)
+	arcaIndex, _ := fs.ReadFile(assets.BuildFS, "web/dist/arca/index.html")
 
 	router.NoRoute(
 		pluginDispatcher,
@@ -34,6 +36,23 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 		middleware.AccessTokenAudit(),
 		middleware.GlobalWebRateLimit(frontendFS),
 		middleware.Cache(),
+		func(c *gin.Context) {
+			if len(arcaIndex) > 0 && c.Request.URL.Path == "/" &&
+				(c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
+				c.Header("Cache-Control", "no-cache")
+				c.Redirect(http.StatusTemporaryRedirect, "/arca/")
+				c.Abort()
+			}
+		},
+		func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if len(arcaIndex) > 0 && (path == "/arca" || path == "/arca/" || path == "/arca/index.html") &&
+				(c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
+				c.Header("Cache-Control", "no-cache")
+				c.Data(http.StatusOK, "text/html; charset=utf-8", arcaIndex)
+				c.Abort()
+			}
+		},
 		middleware.ServeFrontendFiles(frontendFS),
 		func(c *gin.Context) {
 			if strings.HasPrefix(c.Request.RequestURI, "/v1") || strings.HasPrefix(c.Request.RequestURI, "/api") || strings.HasPrefix(c.Request.RequestURI, "/assets") {
@@ -41,6 +60,17 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 				return
 			}
 			c.Header("Cache-Control", "no-cache")
+			if len(arcaIndex) > 0 && (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
+				path := c.Request.URL.Path
+				if strings.HasPrefix(path, "/arca/assets/") {
+					c.Status(http.StatusNotFound)
+					return
+				}
+				if path == "/arca" || strings.HasPrefix(path, "/arca/") {
+					c.Data(http.StatusOK, "text/html; charset=utf-8", arcaIndex)
+					return
+				}
+			}
 			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
 		},
 	)

@@ -49,6 +49,9 @@ jobs:
           cd web
           bun install --frozen-lockfile
           DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(git describe --tags) bun run build
+          cd ../web-arca
+          bun install --frozen-lockfile
+          bun run build
           cd ..
 
       # - name: Build Go binary (macos/Linux)

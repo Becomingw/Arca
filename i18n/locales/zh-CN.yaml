@@ -98,3 +98,6 @@ channel.upstream_update_failed_channels: "失败渠道 ID（展示 {{.Shown}}/{{
 channel.upstream_update_more_omitted: "（其余 {{.Count}} 个已省略）"
 
 channel.notify_scheduled_subject: "渠道“{{.Name}}” (#{{.Id}}) 插件通知"
+
+arca.feedback_mention_title: "有人在 Arca 反馈中提到了你"
+arca.feedback_mention_content: "登录 Arca 查看讨论。"

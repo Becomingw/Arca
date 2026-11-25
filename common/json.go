@@ -65,7 +65,19 @@ func DecodeJson(reader io.Reader, v any) error {
 // DecodeJsonBody reads one JSON value and requires EOF after trailing whitespace.
 // Seekable readers let the decoder process large values through a bounded window.
 func DecodeJsonBody(reader io.Reader, v any) error {
+	return decodeJsonBody(reader, v, false)
+}
+
+// DecodeJsonBodyStrict rejects unknown object fields in addition to trailing data.
+func DecodeJsonBodyStrict(reader io.Reader, v any) error {
+	return decodeJsonBody(reader, v, true)
+}
+
+func decodeJsonBody(reader io.Reader, v any, strict bool) error {
 	decoder := json.NewDecoder(reader)
+	if strict {
+		decoder.DisallowUnknownFields()
+	}
 	if err := decoder.Decode(v); err != nil {
 		return err
 	}

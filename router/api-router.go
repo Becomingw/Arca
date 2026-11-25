@@ -72,6 +72,39 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/verify/methods", middleware.UserAuth(), middleware.DisableCache(), controller.GetVerificationMethods)
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.UniversalVerify)
 
+		arcaFeedback := apiRouter.Group("/arca/feedback", middleware.DisableCache(), middleware.UserAuth())
+		arcaFeedback.GET("", controller.ListArcaFeedback)
+		arcaFeedback.POST("", middleware.UserCriticalRateLimit("arca-feedback"), controller.CreateArcaFeedback)
+		arcaFeedback.GET("/mentionable", controller.ListArcaFeedbackMentionable)
+		arcaFeedback.GET("/notifications", controller.ListArcaFeedbackNotifications)
+		arcaFeedback.POST("/notifications/read", middleware.UserCriticalRateLimit("arca-feedback"), controller.MarkArcaFeedbackNotificationsRead)
+		arcaFeedback.GET("/:id", controller.GetArcaFeedback)
+		arcaFeedback.POST("/:id/commands", middleware.UserCriticalRateLimit("arca-feedback"), controller.CommandArcaFeedback)
+
+		apiRouter.GET("/arca/requests/:request_id/diagnostics", middleware.DisableCache(), middleware.UserAuth(), controller.GetArcaRequestDiagnostics)
+
+		arcaProfile := apiRouter.Group("/arca/profile", middleware.DisableCache(), middleware.UserAuth())
+		arcaProfile.GET("", controller.GetArcaProfile)
+		arcaProfile.PUT("/privacy", middleware.UserCriticalRateLimit("arca-profile"), controller.PutArcaProfilePrivacy)
+		arcaProfile.PUT("/avatar", middleware.UserCriticalRateLimit("arca-avatar"), controller.PutArcaAvatar)
+		arcaProfile.DELETE("/avatar", middleware.UserCriticalRateLimit("arca-avatar"), controller.DeleteArcaAvatar)
+		arcaProfile.GET("/heatmap", controller.GetArcaHeatmap)
+		apiRouter.GET("/arca/team-activity", middleware.DisableCache(), middleware.UserAuth(), controller.GetArcaTeamActivity)
+		apiRouter.GET("/arca/avatars", middleware.DisableCache(), middleware.UserAuth(), controller.GetArcaAvatarHandles)
+		apiRouter.GET("/arca/avatars/:handle", controller.GetArcaAvatar)
+
+		apiRouter.GET("/arca/entitlements/me", middleware.DisableCache(), middleware.UserAuth(), controller.GetArcaMyEntitlements)
+		arcaEntitlements := apiRouter.Group("/arca/admin/entitlements", middleware.DisableCache(), middleware.RootAuth())
+		arcaEntitlements.GET("", controller.GetArcaEntitlementPolicy)
+		arcaEntitlements.PUT("", controller.PutArcaEntitlementPolicy)
+		arcaEntitlements.POST("/preview", controller.PreviewArcaEntitlementPolicy)
+
+		apiRouter.GET("/opencode/config", middleware.RouteTag("relay"), middleware.DisableCache(), func(c *gin.Context) {
+			c.Writer.Header().Add("Vary", "Authorization")
+			c.Next()
+		}, middleware.TokenAuth(), controller.GetArcaOpenCodeConfig)
+		apiRouter.GET("/opencode/setup", controller.DownloadArcaOpenCodeSync)
+
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/auth/refresh", middleware.SessionCookieOriginGuard(), middleware.CriticalRateLimit(), middleware.DisableCache(), controller.RefreshAuth)
