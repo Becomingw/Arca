@@ -4,7 +4,10 @@ import { ArrowUpRight, Bell, BookOpen, Box, ChartNoAxesCombined, CircleUserRound
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { api, exportOpenCode, restoreSession, signOut, viewer } from './api.js'
+import Home from './home/Home.vue'
+import { ARCA_LOGO_PATH, ARCA_LOGO_VIEWBOX } from './home/arcaBrand'
 
+const isPublicHome = location.pathname === '/'
 const entries = [
   { id: 'overview', title: '概览', icon: Box },
   { id: 'models', title: '模型', icon: Layers3 },
@@ -95,7 +98,7 @@ async function refreshNotices() {
 }
 
 async function loadPage() {
-  if (!viewer.value) return
+  if (isPublicHome || !viewer.value) return
   const version = ++loadVersion
   const current = section.value
   const selectedIssue = issueID.value
@@ -176,18 +179,20 @@ function handleFocus() {
 }
 
 onMounted(async () => {
-  readLocation()
-  window.addEventListener('hashchange', readLocation)
+  if (!isPublicHome) {
+    readLocation()
+    window.addEventListener('hashchange', readLocation)
+  }
   window.addEventListener('focus', handleFocus)
   try {
     await restoreSession()
-    readLocation()
+    if (!isPublicHome) readLocation()
   } catch (error) {
     message.value = error.message
   } finally {
     restoring.value = false
   }
-  noticeTimer = setInterval(() => refreshNotices().catch(() => {}), 60000)
+  if (!isPublicHome) noticeTimer = setInterval(() => refreshNotices().catch(() => {}), 60000)
 })
 
 onUnmounted(() => {
@@ -215,7 +220,7 @@ function previousEvents() {
   if (eventHistory.value.length) eventAfter.value = eventHistory.value.pop()
 }
 watch(() => viewer.value?.id, (id, previous) => {
-  if (id === previous) return
+  if (isPublicHome || id === previous) return
   loadVersion++
   notices.value = []
   unread.value = 0
@@ -409,22 +414,22 @@ async function logout() {
 </script>
 
 <template>
-  <main v-if="restoring || !viewer" class="landing">
-    <header class="landing-header"><a class="brand" href="/arca/"><Box :size="24" /> Arca</a><a href="/about">New API <ArrowUpRight :size="15" /></a></header>
-    <section class="hero">
-      <div class="hero-mark" aria-hidden="true"><Box :size="180" :stroke-width="0.7" /></div>
-      <p class="hero-brand">Arca</p>
-      <h1>让团队在同一个地方使用 AI。</h1>
-      <p>管理模型与使用权益，查看请求，和团队一起解决问题。</p>
-      <a v-if="!restoring" class="primary" href="/sign-in?redirect=%2Farca%2F">使用 New API 账号登录 <ArrowUpRight :size="18" /></a>
-      <p v-else role="status">正在恢复登录状态…</p>
-      <p v-if="message" role="alert" class="error">{{ message }}</p>
-    </section>
-  </main>
+  <Home
+    v-if="isPublicHome || restoring || !viewer"
+    :authenticated="Boolean(viewer)"
+    :theme="theme"
+    :message="message"
+    @toggle-theme="theme = theme === 'dark' ? 'light' : 'dark'"
+  />
 
   <div v-else class="workspace">
     <aside class="sidebar">
-      <a class="brand" href="#overview"><Box :size="23" /> Arca</a>
+      <a class="brand" href="#overview">
+        <svg width="23" height="23" :viewBox="ARCA_LOGO_VIEWBOX" aria-hidden="true">
+          <path :d="ARCA_LOGO_PATH" fill="currentColor" />
+        </svg>
+        Arca
+      </a>
       <nav aria-label="控制台">
         <a v-for="entry in navigation" :key="entry.id" :href="'#' + entry.id" :aria-current="section === entry.id ? 'page' : undefined">
           <component :is="entry.icon" :size="18" /> <span>{{ entry.title }}</span>

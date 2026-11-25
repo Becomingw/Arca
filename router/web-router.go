@@ -37,16 +37,8 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 		middleware.GlobalWebRateLimit(frontendFS),
 		middleware.Cache(),
 		func(c *gin.Context) {
-			if len(arcaIndex) > 0 && c.Request.URL.Path == "/" &&
-				(c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
-				c.Header("Cache-Control", "no-cache")
-				c.Redirect(http.StatusTemporaryRedirect, "/arca/")
-				c.Abort()
-			}
-		},
-		func(c *gin.Context) {
 			path := c.Request.URL.Path
-			if len(arcaIndex) > 0 && (path == "/arca" || path == "/arca/" || path == "/arca/index.html") &&
+			if len(arcaIndex) > 0 && (path == "/" || path == "/arca" || path == "/arca/" || path == "/arca/index.html") &&
 				(c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
 				c.Header("Cache-Control", "no-cache")
 				c.Data(http.StatusOK, "text/html; charset=utf-8", arcaIndex)

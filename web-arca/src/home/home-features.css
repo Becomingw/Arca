@@ -1,0 +1,29 @@
+/* Public pages keep their controls separate from the workspace. */
+.arca-home button { border: 0; background: transparent; border-radius: 0; padding: 0; min-height: 0; }
+.arca-home fieldset { margin: 0; }
+.arca-home .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.arca-feature-page { display: flex; align-items: center; justify-content: center; padding: 64px 7% 86px; border-top: 1px solid var(--home-border); }
+.arca-feature-content { width: min(100%, 1080px); }
+.arca-feature-heading { font-family: var(--serif); font-size: 44px; line-height: 1.3; font-weight: 500; letter-spacing: 0; text-align: center; overflow-wrap: anywhere; }
+.arca-feature-description { max-width: 760px; margin: 16px auto 0; font-family: var(--serif); font-size: 18px; line-height: 30px; text-align: center; color: var(--home-muted); }
+.arca-feature-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; list-style: none; padding-top: 26px; border-top: 1px solid var(--home-border); }
+.arca-feature-points li { display: flex; align-items: center; justify-content: center; gap: 14px; font-family: var(--serif); font-size: 17px; line-height: 26px; }
+.arca-feature-points svg { width: 21px; height: 21px; flex-shrink: 0; color: var(--home-accent); stroke-width: 1.5; }
+.arca-feature-footnote { margin-top: 24px; font-family: var(--serif); font-size: 13px; line-height: 22px; text-align: center; color: var(--home-muted); }
+.arca-motion-toggle { display: inline-grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 5px; color: var(--home-muted); }
+.arca-motion-toggle svg { width: 15px; height: 15px; stroke-width: 1.75; }
+.arca-motion-toggle:hover { background: var(--home-hover); color: var(--home-accent); }
+.arca-motion-toggle:focus-visible { outline: 2px solid var(--home-accent); outline-offset: 3px; }
+.arca-motion-toggle:disabled { opacity: 0.35; cursor: default; }
+@media (max-width: 1023px) { .arca-feature-page { padding-left: 5%; padding-right: 5%; } .arca-feature-heading { font-size: 38px; } }
+@media (max-width: 700px) {
+  .arca-feature-page { padding: 40px 26px 76px; }
+  .arca-feature-heading { font-size: 29px; line-height: 1.4; }
+  .arca-feature-description { margin-top: 12px; font-size: 15px; line-height: 25px; }
+  .arca-feature-points { gap: 14px; padding-top: 20px; }
+  .arca-feature-points li { flex-direction: column; gap: 8px; font-size: 12px; line-height: 20px; text-align: center; }
+  .arca-feature-points svg { width: 19px; height: 19px; }
+  .arca-feature-footnote { margin-top: 20px; font-size: 11px; line-height: 19px; }
+}
+@media (max-width: 359px) { .arca-feature-page { padding-left: 20px; padding-right: 20px; } .arca-feature-heading { font-size: 26px; } }
+@media (max-height: 760px) and (min-width: 701px) { .arca-feature-page { padding-top: 32px; padding-bottom: 66px; } .arca-feature-heading { font-size: 36px; } }

@@ -1,6 +1,6 @@
 # Arca integration for New API
 
-The embedded Vue console opens at `/arca/`. The same gateway serves the New API login, channels, models, keys, billing, and original console routes. The Arca console uses the same authenticated account and delegates sign-in, key creation, and advanced operations to the native interface.
+The embedded Arca homepage opens at `/`, the user console at `/arca/`, and the Arca-branded account screens at `/sign-in`. They use the same gateway account, including the configured password, passkey, OAuth, and two-factor login flows. Key creation and advanced operations use the original console routes.
 
 ## Build and verification
 
