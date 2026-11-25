@@ -64,7 +64,7 @@ export async function restoreSession({ force = false } = {}) {
       return null
     }
     const next = parseBundle(await readEnvelope(response))
-    if (!next) throw new Error('登入回應格式有誤')
+    if (!next) throw new Error('登录响应格式有误')
     if (generation !== sessionGeneration) return null
     session = next
     viewer.value = next.user
@@ -99,11 +99,11 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   }
   const previous = session
   const current = await restoreSession()
-  if (!current) throw new APIError(401, '請先登入')
+  if (!current) throw new APIError(401, '请先登录')
   if (method !== 'GET' && method !== 'HEAD' && (
     !previous || current.session.sid !== previous.session.sid || current.user.id !== previous.user.id
   )) {
-    throw new APIError(409, '登入帳號已變更，請確認後重試')
+    throw new APIError(409, '登录账号已切换，请确认后重试')
   }
   const send = (auth) => {
     const headers = { Authorization: `Bearer ${auth.access_token}` }
@@ -120,7 +120,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     if (renewed && renewed.session.sid === current.session.sid && renewed.user.id === current.user.id) {
       response = await send(renewed)
     } else if (renewed) {
-      throw new APIError(409, '登入帳號已變更，請確認後重試')
+      throw new APIError(409, '登录账号已切换，请确认后重试')
     }
   }
   return readEnvelope(response)
@@ -133,6 +133,6 @@ export async function exportOpenCode(relayKey) {
     cache: 'no-store',
     redirect: 'error',
   })
-  if (!response.ok) throw new APIError(response.status, '無法取得 OpenCode 設定')
+  if (!response.ok) throw new APIError(response.status, '无法获取 OpenCode 配置')
   return response.json()
 }

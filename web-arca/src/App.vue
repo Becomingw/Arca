@@ -6,15 +6,15 @@ import { marked } from 'marked'
 import { api, exportOpenCode, restoreSession, signOut, viewer } from './api.js'
 
 const entries = [
-  { id: 'overview', title: '概覽', icon: Box },
+  { id: 'overview', title: '概览', icon: Box },
   { id: 'models', title: '模型', icon: Layers3 },
   { id: 'keys', title: '我的 API Keys', icon: KeyRound },
-  { id: 'feedback', title: '討論與回饋', icon: MessageSquare },
-  { id: 'activity', title: '團隊活動', icon: ChartNoAxesCombined },
-  { id: 'profile', title: '個人設定', icon: CircleUserRound },
-  { id: 'agent', title: 'Agent 協作', icon: Terminal },
+  { id: 'feedback', title: '讨论与反馈', icon: MessageSquare },
+  { id: 'activity', title: '团队活动', icon: ChartNoAxesCombined },
+  { id: 'profile', title: '个人设置', icon: CircleUserRound },
+  { id: 'agent', title: 'Agent 协作', icon: Terminal },
 ]
-const adminEntry = { id: 'entitlements', title: '組織與權益', icon: Layers3 }
+const adminEntry = { id: 'entitlements', title: '组织与权益', icon: Layers3 }
 const navigation = computed(() => viewer.value?.role >= 100 ? [...entries, adminEntry] : entries)
 const section = ref('overview')
 const issueID = ref('')
@@ -57,7 +57,7 @@ const activityDays = ref(7)
 const myAvatar = computed(() => profile.value?.avatar || '')
 const tokenSum = computed(() => heatmap.value?.days?.reduce((sum, item) => sum + item.tokens, 0) || 0)
 const greatest = computed(() => Math.max(1, ...(heatmap.value?.days?.map(item => item.tokens) || [])))
-const activeTitle = computed(() => navigation.value.find(entry => entry.id === section.value)?.title || '概覽')
+const activeTitle = computed(() => navigation.value.find(entry => entry.id === section.value)?.title || '概览')
 let noticeTimer
 let loadVersion = 0
 
@@ -114,7 +114,7 @@ async function loadPage() {
       models.value = Array.isArray(available) ? available : []
       heatmap.value = chart
       entitlement.value = benefits
-      if (!benefits) entitlementError.value = '目前無法取得權益資料。'
+      if (!benefits) entitlementError.value = '暂时无法获取权益信息。'
       break
     }
     case 'models': {
@@ -260,11 +260,11 @@ function markdown(text) {
 }
 
 function formatDate(time) {
-  return new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time * 1000))
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time * 1000))
 }
 
 function statusLabel(status) {
-  return ({ open: '處理中', resolved: '已解決', closed: '已關閉' })[status] || status
+  return ({ open: '处理中', resolved: '已解决', closed: '已关闭' })[status] || status
 }
 
 async function action(work) {
@@ -327,7 +327,7 @@ async function command(data) {
 }
 
 function confirmDelete(data) {
-  if (window.confirm('確定要刪除這則內容？')) return command(data)
+  if (window.confirm('确定要删除这条内容吗？')) return command(data)
 }
 
 function previewPolicy() {
@@ -366,7 +366,7 @@ async function changeAvatar(event) {
   event.target.value = ''
   if (!file) return
   await action(async () => {
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('請選擇 10 MB 以內的 PNG、JPEG 或 WebP 圖片')
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('请选择 10 MB 以内的 PNG、JPEG 或 WebP 图片')
     const bitmap = await createImageBitmap(file)
     try {
       const canvas = document.createElement('canvas')
@@ -374,7 +374,7 @@ async function changeAvatar(event) {
       const side = Math.min(bitmap.width, bitmap.height)
       canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256)
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85))
-      if (!blob) throw new Error('圖片處理失敗')
+      if (!blob) throw new Error('图片处理失败')
       profile.value = { ...profile.value, ...await api('/api/arca/profile/avatar', { method: 'PUT', body: blob }) }
     } finally {
       bitmap.close()
@@ -414,10 +414,10 @@ async function logout() {
     <section class="hero">
       <div class="hero-mark" aria-hidden="true"><Box :size="180" :stroke-width="0.7" /></div>
       <p class="hero-brand">Arca</p>
-      <h1>讓團隊在同一個地方使用 AI。</h1>
-      <p>管理模型與使用權益，查看請求，和團隊一起解決問題。</p>
-      <a v-if="!restoring" class="primary" href="/sign-in?redirect=%2Farca%2F">使用 New API 帳號登入 <ArrowUpRight :size="18" /></a>
-      <p v-else role="status">正在恢復登入狀態…</p>
+      <h1>让团队在同一个地方使用 AI。</h1>
+      <p>管理模型与使用权益，查看请求，和团队一起解决问题。</p>
+      <a v-if="!restoring" class="primary" href="/sign-in?redirect=%2Farca%2F">使用 New API 账号登录 <ArrowUpRight :size="18" /></a>
+      <p v-else role="status">正在恢复登录状态…</p>
       <p v-if="message" role="alert" class="error">{{ message }}</p>
     </section>
   </main>
@@ -432,24 +432,24 @@ async function logout() {
       </nav>
       <div class="sidebar-bottom">
         <a href="/dashboard"><ArrowUpRight :size="17" /> New API 控制台</a>
-        <button type="button" @click="logout"><LogOut :size="17" /> 登出</button>
+        <button type="button" @click="logout"><LogOut :size="17" /> 退出登录</button>
       </div>
     </aside>
     <div class="main-panel">
       <header class="topbar">
         <span>{{ activeTitle }}</span>
         <div class="top-controls">
-          <button type="button" class="icon" :aria-label="theme === 'dark' ? '淺色' : '深色'" @click="theme = theme === 'dark' ? 'light' : 'dark'">
+          <button type="button" class="icon" :aria-label="theme === 'dark' ? '浅色' : '深色'" @click="theme = theme === 'dark' ? 'light' : 'dark'">
             <component :is="theme === 'dark' ? Sun : Moon" :size="19" />
           </button>
           <div class="notice-area">
-            <button type="button" class="icon" aria-label="站內通知" :aria-expanded="noticesOpen" @click="noticesOpen = !noticesOpen; if (noticesOpen) refreshNotices().catch(error => message = error.message)">
+            <button type="button" class="icon" aria-label="站内通知" :aria-expanded="noticesOpen" @click="noticesOpen = !noticesOpen; if (noticesOpen) refreshNotices().catch(error => message = error.message)">
               <Bell :size="19" /><span v-if="unread" class="unread">{{ unread }}</span>
             </button>
             <section v-if="noticesOpen" class="popover">
-              <div class="heading-row"><strong>站內通知</strong><button v-if="unread" @click="action(async () => { await api('/api/arca/feedback/notifications/read', { method: 'POST', body: { all: true } }); await refreshNotices() })">全部已讀</button></div>
-              <button v-for="item in notices" :key="item.id" class="notice" @click="openNotice(item)"><strong>{{ item.issue_title }}</strong><span class="author"><img v-if="avatarHandles[item.actor_id]" class="avatar" :src="avatarURL(avatarHandles[item.actor_id])" alt="" />{{ item.actor_username || '成員' }} · {{ item.snippet }}</span></button>
-              <p v-if="!notices.length" class="muted">目前沒有通知。</p>
+              <div class="heading-row"><strong>站内通知</strong><button v-if="unread" @click="action(async () => { await api('/api/arca/feedback/notifications/read', { method: 'POST', body: { all: true } }); await refreshNotices() })">全部标为已读</button></div>
+              <button v-for="item in notices" :key="item.id" class="notice" @click="openNotice(item)"><strong>{{ item.issue_title }}</strong><span class="author"><img v-if="avatarHandles[item.actor_id]" class="avatar" :src="avatarURL(avatarHandles[item.actor_id])" alt="" />{{ item.actor_username || '成员' }} · {{ item.snippet }}</span></button>
+              <p v-if="!notices.length" class="muted">暂无通知。</p>
             </section>
           </div>
           <a href="#profile" class="avatar" :aria-label="viewer.username">
@@ -461,146 +461,146 @@ async function logout() {
 
       <div class="page">
         <p v-if="message" class="error" role="alert">{{ message }}</p>
-        <p v-if="busy" role="status" class="loading">處理中…</p>
+        <p v-if="busy" role="status" class="loading">处理中…</p>
         <template v-if="section === 'overview'">
           <h1>{{ viewer.display_name || viewer.username }}</h1>
           <div class="cards">
-            <a class="card stat" href="#models"><span>可使用模型</span><strong>{{ models.length }}</strong></a>
-            <a class="card stat" href="#profile"><span>統計區間 Token</span><strong>{{ heatmap?.available ? tokenSum.toLocaleString('zh-TW') : '—' }}</strong></a>
-            <a class="card stat" href="#feedback"><span>未讀通知</span><strong>{{ unread }}</strong></a>
+            <a class="card stat" href="#models"><span>可用模型</span><strong>{{ models.length }}</strong></a>
+            <a class="card stat" href="#profile"><span>统计周期 Token</span><strong>{{ heatmap?.available ? tokenSum.toLocaleString('zh-CN') : '—' }}</strong></a>
+            <a class="card stat" href="#feedback"><span>未读通知</span><strong>{{ unread }}</strong></a>
           </div>
-          <section class="card"><h2>使用權益</h2><p v-if="entitlementError" class="muted">{{ entitlementError }}</p><pre v-else-if="entitlement">{{ JSON.stringify(entitlement, null, 2) }}</pre></section>
+          <section class="card"><h2>使用权益</h2><p v-if="entitlementError" class="muted">{{ entitlementError }}</p><pre v-else-if="entitlement">{{ JSON.stringify(entitlement, null, 2) }}</pre></section>
         </template>
 
         <template v-else-if="section === 'models'">
           <h1>模型</h1>
-          <p v-if="!models.length" class="muted">目前沒有可使用的模型。</p>
+          <p v-if="!models.length" class="muted">暂无可用模型。</p>
           <div class="cards"><article v-for="item in models" :key="item" class="card model"><Layers3 :size="20" />{{ item }}</article></div>
         </template>
 
         <template v-else-if="section === 'keys'">
           <div class="heading-row"><h1>我的 API Keys</h1><a class="secondary" href="/keys">管理 API Keys <ArrowUpRight :size="16" /></a></div>
-          <ul class="card plain-list"><li v-for="key in keys" :key="key.id"><KeyRound :size="17" />{{ key.name }}</li><li v-if="!keys.length" class="muted">目前沒有 API Key。</li></ul>
+          <ul class="card plain-list"><li v-for="key in keys" :key="key.id"><KeyRound :size="17" />{{ key.name }}</li><li v-if="!keys.length" class="muted">暂无 API Key。</li></ul>
           <form class="card form" @submit.prevent="downloadConfig">
-            <h2>匯出 OpenCode 設定</h2>
-            <label>要使用的推理 API Key<input v-model="relayKey" type="password" autocomplete="off" required spellcheck="false" /></label>
-            <button class="primary" :disabled="busy">下載 opencode.json</button>
-            <a class="secondary" href="/api/opencode/setup">下載 Linux 同步工具</a>
+            <h2>导出 OpenCode 配置</h2>
+            <label>推理 API Key<input v-model="relayKey" type="password" autocomplete="off" required spellcheck="false" /></label>
+            <button class="primary" :disabled="busy">下载 opencode.json</button>
+            <a class="secondary" href="/api/opencode/setup">下载 Linux 同步工具</a>
           </form>
         </template>
 
         <template v-else-if="section === 'feedback'">
-          <div class="heading-row"><h1>討論與回饋</h1><a v-if="issueID" class="secondary" href="#feedback">回到主題列表</a></div>
+          <div class="heading-row"><h1>讨论与反馈</h1><a v-if="issueID" class="secondary" href="#feedback">回到主题列表</a></div>
           <div v-if="issueID && issue?.issue.id === issueID" class="discussion card">
             <div class="heading-row"><h2>{{ issue.issue.title }}</h2><span class="tag">{{ statusLabel(issue.issue.status) }}</span></div>
-            <div class="author"><img v-if="avatarHandles[issue.issue.owner_id]" class="avatar" :src="avatarURL(avatarHandles[issue.issue.owner_id])" alt="" />{{ issue.issue.owner_username || '成員' }} · {{ formatDate(issue.issue.created_at) }}</div>
+            <div class="author"><img v-if="avatarHandles[issue.issue.owner_id]" class="avatar" :src="avatarURL(avatarHandles[issue.issue.owner_id])" alt="" />{{ issue.issue.owner_username || '成员' }} · {{ formatDate(issue.issue.created_at) }}</div>
             <div class="markdown" v-html="markdown(issue.issue.description)" />
             <div class="controls">
-              <button v-if="viewer.role >= 10 || String(viewer.id) === issue.issue.owner_id" @click="editingTopic = { title: issue.issue.title, description: issue.issue.description }">編輯主題</button>
-              <button v-if="viewer.role >= 10 || String(viewer.id) === issue.issue.owner_id" @click="confirmDelete({ action: 'delete_issue' })">刪除主題</button>
-              <button v-if="viewer.role >= 10" @click="command({ action: 'set_pinned', pinned: !issue.issue.pinned_at })">{{ issue.issue.pinned_at ? '取消置頂' : '置頂' }}</button>
+              <button v-if="viewer.role >= 10 || String(viewer.id) === issue.issue.owner_id" @click="editingTopic = { title: issue.issue.title, description: issue.issue.description }">编辑主题</button>
+              <button v-if="viewer.role >= 10 || String(viewer.id) === issue.issue.owner_id" @click="confirmDelete({ action: 'delete_issue' })">删除主题</button>
+              <button v-if="viewer.role >= 10" @click="command({ action: 'set_pinned', pinned: !issue.issue.pinned_at })">{{ issue.issue.pinned_at ? '取消置顶' : '置顶' }}</button>
             </div>
             <form v-if="editingTopic" class="form" @submit.prevent="command({ action: 'edit_issue', ...editingTopic })">
-              <label>標題<input v-model="editingTopic.title" required maxlength="200" /></label>
-              <label>內容<textarea v-model="editingTopic.description" required rows="4" /></label>
-              <div class="controls"><button class="primary" :disabled="busy">儲存</button><button type="button" @click="editingTopic = null">取消</button></div>
+              <label>标题<input v-model="editingTopic.title" required maxlength="200" /></label>
+              <label>内容<textarea v-model="editingTopic.description" required rows="4" /></label>
+              <div class="controls"><button class="primary" :disabled="busy">保存</button><button type="button" @click="editingTopic = null">取消</button></div>
             </form>
             <article v-for="event in issue.events.filter(event => event.kind !== 'created')" :key="event.seq" class="reply">
-              <div class="author"><img v-if="avatarHandles[event.actor_id]" class="avatar" :src="avatarURL(avatarHandles[event.actor_id])" alt="" />{{ event.actor_username || '成員' }} · {{ formatDate(event.created_at) }}</div>
+              <div class="author"><img v-if="avatarHandles[event.actor_id]" class="avatar" :src="avatarURL(avatarHandles[event.actor_id])" alt="" />{{ event.actor_username || '成员' }} · {{ formatDate(event.created_at) }}</div>
               <div v-if="event.content" class="markdown" v-html="markdown(event.content)" />
-              <p v-if="event.to_status" class="muted">狀態更新為{{ statusLabel(event.to_status) }}</p>
+              <p v-if="event.to_status" class="muted">状态更新为{{ statusLabel(event.to_status) }}</p>
               <div v-if="event.kind === 'reply' && !event.deleted_at && (viewer.role >= 10 || String(viewer.id) === event.actor_id)" class="controls">
-                <button v-if="String(viewer.id) === event.actor_id" @click="editingReply = { seq: event.seq, content: event.content }">編輯回覆</button>
-                <button @click="confirmDelete({ action: 'delete_reply', seq: event.seq })">刪除回覆</button>
+                <button v-if="String(viewer.id) === event.actor_id" @click="editingReply = { seq: event.seq, content: event.content }">编辑回复</button>
+                <button @click="confirmDelete({ action: 'delete_reply', seq: event.seq })">删除回复</button>
               </div>
               <form v-if="editingReply?.seq === event.seq" class="form" @submit.prevent="command({ action: 'edit_reply', ...editingReply })">
-                <label>回覆<textarea v-model="editingReply.content" required rows="3" /></label>
-                <div class="controls"><button class="primary" :disabled="busy">儲存</button><button type="button" @click="editingReply = null">取消</button></div>
+                <label>回复<textarea v-model="editingReply.content" required rows="3" /></label>
+                <div class="controls"><button class="primary" :disabled="busy">保存</button><button type="button" @click="editingReply = null">取消</button></div>
               </form>
             </article>
             <div v-if="eventHistory.length || issue.has_more" class="controls">
-              <button type="button" :disabled="busy || !eventHistory.length" @click="previousEvents">較早回覆</button>
-              <button type="button" :disabled="busy || !issue.has_more" @click="nextEvents">較新回覆</button>
+              <button type="button" :disabled="busy || !eventHistory.length" @click="previousEvents">上一页回复</button>
+              <button type="button" :disabled="busy || !issue.has_more" @click="nextEvents">下一页回复</button>
             </div>
             <form class="form" @submit.prevent="command({ action: 'reply', content: reply })">
-              <label>回覆<textarea v-model="reply" rows="4" required placeholder="用 @使用者名稱 通知成員" /></label>
+              <label>回复<textarea v-model="reply" rows="4" required placeholder="输入 @用户名 通知成员" /></label>
               <div class="heading-row">
-                <button class="primary" :disabled="busy">發送回覆</button>
-                <button v-if="String(viewer.id) === issue.issue.owner_id && issue.issue.status === 'open'" type="button" :disabled="busy || !reply.trim()" @click="command({ action: 'set_status', status: 'resolved', comment: reply })">標記已解決</button>
-                <button v-if="String(viewer.id) === issue.issue.owner_id && issue.issue.status !== 'open'" type="button" :disabled="busy" @click="command({ action: 'set_status', status: 'open' })">重新開啟</button>
-                <button v-if="viewer.role >= 10 && issue.issue.status !== 'closed'" type="button" :disabled="busy" @click="command({ action: 'set_status', status: 'closed' })">關閉主題</button>
+                <button class="primary" :disabled="busy">发送回复</button>
+                <button v-if="String(viewer.id) === issue.issue.owner_id && issue.issue.status === 'open'" type="button" :disabled="busy || !reply.trim()" @click="command({ action: 'set_status', status: 'resolved', comment: reply })">标记已解决</button>
+                <button v-if="String(viewer.id) === issue.issue.owner_id && issue.issue.status !== 'open'" type="button" :disabled="busy" @click="command({ action: 'set_status', status: 'open' })">重新打开</button>
+                <button v-if="viewer.role >= 10 && issue.issue.status !== 'closed'" type="button" :disabled="busy" @click="command({ action: 'set_status', status: 'closed' })">关闭主题</button>
               </div>
             </form>
           </div>
           <div v-else-if="!issueID" class="discussion-grid">
-            <section class="card"><h2>主題</h2><ul class="plain-list topics"><li v-for="topic in topics" :key="topic.id"><a :href="'#feedback/' + topic.id"><div class="heading-row"><strong>{{ topic.title }}</strong><span class="tag">{{ statusLabel(topic.status) }}</span></div><span class="author"><img v-if="avatarHandles[topic.owner_id]" class="avatar" :src="avatarURL(avatarHandles[topic.owner_id])" alt="" />{{ topic.owner_username || '成員' }} · {{ formatDate(topic.updated_at) }}</span></a></li><li v-if="!topics.length" class="muted">目前沒有討論。</li></ul>
+            <section class="card"><h2>主题</h2><ul class="plain-list topics"><li v-for="topic in topics" :key="topic.id"><a :href="'#feedback/' + topic.id"><div class="heading-row"><strong>{{ topic.title }}</strong><span class="tag">{{ statusLabel(topic.status) }}</span></div><span class="author"><img v-if="avatarHandles[topic.owner_id]" class="avatar" :src="avatarURL(avatarHandles[topic.owner_id])" alt="" />{{ topic.owner_username || '成员' }} · {{ formatDate(topic.updated_at) }}</span></a></li><li v-if="!topics.length" class="muted">暂无讨论。</li></ul>
               <div v-if="topicTotal > topicPageSize" class="controls">
-                <button type="button" :disabled="busy || topicOffset === 0" @click="topicOffset = Math.max(0, topicOffset - topicPageSize)">上一頁</button>
-                <button type="button" :disabled="busy || topicOffset + topicPageSize >= topicTotal" @click="topicOffset += topicPageSize">下一頁</button>
+                <button type="button" :disabled="busy || topicOffset === 0" @click="topicOffset = Math.max(0, topicOffset - topicPageSize)">上一页</button>
+                <button type="button" :disabled="busy || topicOffset + topicPageSize >= topicTotal" @click="topicOffset += topicPageSize">下一页</button>
               </div>
             </section>
             <form class="card form" @submit.prevent="submitTopic">
-              <h2>新增主題</h2>
-              <label>標題<input v-model="topicDraft.title" required maxlength="200" /></label>
-              <label>分類<select v-model="topicDraft.category"><option value="bug">問題回報</option><option value="model">模型</option><option value="access">權益</option><option value="suggestion">建議</option><option value="other">其他</option></select></label>
-              <label>內容<textarea v-model="topicDraft.description" rows="5" required /></label>
-              <label>請求 ID<input v-model="topicDraft.request_id" maxlength="64" /></label>
-              <button v-if="topicDraft.request_id.trim()" type="button" @click="previewDiagnostic" :disabled="busy">預覽我的診斷</button>
+              <h2>新建主题</h2>
+              <label>标题<input v-model="topicDraft.title" required maxlength="200" /></label>
+              <label>分类<select v-model="topicDraft.category"><option value="bug">问题反馈</option><option value="model">模型</option><option value="access">权益</option><option value="suggestion">建议</option><option value="other">其他</option></select></label>
+              <label>内容<textarea v-model="topicDraft.description" rows="5" required /></label>
+              <label>请求 ID<input v-model="topicDraft.request_id" maxlength="64" /></label>
+              <button v-if="topicDraft.request_id.trim()" type="button" @click="previewDiagnostic" :disabled="busy">预览请求诊断</button>
               <pre v-if="diagnostic">{{ diagnostic.summary }}</pre>
-              <label v-if="diagnostic" class="check"><input v-model="topicDraft.include_diagnostics" type="checkbox" />公開附上脫敏摘要</label>
-              <button class="primary" :disabled="busy">發佈主題</button>
+              <label v-if="diagnostic" class="check"><input v-model="topicDraft.include_diagnostics" type="checkbox" />附上脱敏摘要，其他成员可见</label>
+              <button class="primary" :disabled="busy">发布主题</button>
             </form>
           </div>
         </template>
 
         <template v-else-if="section === 'activity'">
-          <div class="heading-row"><h1>團隊活動</h1><select v-model.number="activityDays" aria-label="統計區間"><option :value="7">最近 7 天</option><option :value="30">最近 30 天</option></select></div>
+          <div class="heading-row"><h1>团队活动</h1><select v-model.number="activityDays" aria-label="统计周期"><option :value="7">最近 7 天</option><option :value="30">最近 30 天</option></select></div>
           <section class="card">
-            <h2>估算活動時間</h2><p class="muted">每個有成功呼叫的五分鐘區間計一次，使用 UTC。</p>
-            <p v-if="leaderboard?.suppressed" class="muted">區間內活動成員少於三位。</p>
-            <ol v-else class="plain-list ranks"><li v-for="row in leaderboard?.members" :key="row.id"><span>{{ row.rank }}</span><strong>{{ row.label }}</strong><span>{{ row.estimated_minutes }} 分鐘</span></li></ol>
+            <h2>估算活动时间</h2><p class="muted">按 UTC 划分，每有一个调用成功的五分钟时段，就计入五分钟。</p>
+            <p v-if="leaderboard?.suppressed" class="muted">统计周期内的活跃成员少于三人。</p>
+            <ol v-else class="plain-list ranks"><li v-for="row in leaderboard?.members" :key="row.id"><span>{{ row.rank }}</span><strong>{{ row.label }}</strong><span>{{ row.estimated_minutes }} 分钟</span></li></ol>
           </section>
         </template>
 
         <template v-else-if="section === 'profile'">
-          <h1>個人設定</h1>
+          <h1>个人设置</h1>
           <section class="card form">
-            <h2>頭像</h2><div class="avatar avatar-large"><img v-if="myAvatar" :src="avatarURL(myAvatar)" alt="" /><span v-else>{{ viewer.username.slice(0, 1).toUpperCase() }}</span></div>
-            <label>更新頭像<input type="file" accept="image/png,image/jpeg,image/webp" @change="changeAvatar" /></label>
-            <button v-if="myAvatar" :disabled="busy" @click="action(async () => { profile = { ...profile, ...await api('/api/arca/profile/avatar', { method: 'DELETE' }) } })">移除頭像</button>
-            <label v-if="profile" class="check"><input type="checkbox" :checked="profile.leaderboard_anonymous" :disabled="busy" @change="event => action(async () => { profile = { ...profile, ...await api('/api/arca/profile/privacy', { method: 'PUT', body: { leaderboard_anonymous: event.target.checked } }) } })" />在團隊活動榜匿名顯示</label>
+            <h2>头像</h2><div class="avatar avatar-large"><img v-if="myAvatar" :src="avatarURL(myAvatar)" alt="" /><span v-else>{{ viewer.username.slice(0, 1).toUpperCase() }}</span></div>
+            <label>更新头像<input type="file" accept="image/png,image/jpeg,image/webp" @change="changeAvatar" /></label>
+            <button v-if="myAvatar" :disabled="busy" @click="action(async () => { profile = { ...profile, ...await api('/api/arca/profile/avatar', { method: 'DELETE' }) } })">删除头像</button>
+            <label v-if="profile" class="check"><input type="checkbox" :checked="profile.leaderboard_anonymous" :disabled="busy" @change="event => action(async () => { profile = { ...profile, ...await api('/api/arca/profile/privacy', { method: 'PUT', body: { leaderboard_anonymous: event.target.checked } }) } })" />在团队活动榜匿名显示</label>
           </section>
-          <section class="card"><h2>Token 使用量</h2><p v-if="heatmap?.available" class="muted">以 UTC 為準。顯示已收集的用量統計。</p><p v-else class="muted">本站目前未提供用量統計。</p>
-            <div v-if="heatmap?.available" class="heatmap" aria-label="Token 使用量熱力圖">
-              <span v-for="day in heatmap.days" :key="day.date" :title="`${day.date} · ${day.tokens.toLocaleString('zh-TW')}`" :style="{ '--level': day.tokens ? 0.2 + 0.8 * Math.sqrt(day.tokens / greatest) : 0 }" />
+          <section class="card"><h2>Token 使用量</h2><p v-if="heatmap?.available" class="muted">按 UTC 统计已记录的用量。</p><p v-else class="muted">本站暂未提供用量统计。</p>
+            <div v-if="heatmap?.available" class="heatmap" aria-label="Token 使用量热力图">
+              <span v-for="day in heatmap.days" :key="day.date" :title="`${day.date} · ${day.tokens.toLocaleString('zh-CN')}`" :style="{ '--level': day.tokens ? 0.2 + 0.8 * Math.sqrt(day.tokens / greatest) : 0 }" />
             </div>
           </section>
         </template>
 
         <template v-else-if="section === 'entitlements'">
-          <h1>組織與權益</h1>
+          <h1>组织与权益</h1>
           <form v-if="policyVersion !== null" class="card form" @submit.prevent="savePolicy">
-            <h2>權益策略</h2>
-            <label>組織、模型家族和預算<textarea v-model="policyText" rows="16" spellcheck="false" /></label>
+            <h2>权益策略</h2>
+            <label>组织、模型家族和预算<textarea v-model="policyText" rows="16" spellcheck="false" /></label>
             <div class="controls">
-              <label>預覽使用者 ID<input v-model="previewUser" inputmode="numeric" /></label>
+              <label>预览用户 ID<input v-model="previewUser" inputmode="numeric" /></label>
               <label>API Key ID<input v-model="previewKey" inputmode="numeric" /></label>
             </div>
             <pre v-if="policyPreview">{{ JSON.stringify(policyPreview, null, 2) }}</pre>
             <div class="controls">
-              <button type="button" :disabled="busy || Number(previewUser) <= 0" @click="previewPolicy">預覽權益</button>
-              <button class="primary" :disabled="busy">儲存版本 {{ policyVersion }}</button>
-              <button type="button" :disabled="busy" @click="loadPage">重新載入</button>
+              <button type="button" :disabled="busy || Number(previewUser) <= 0" @click="previewPolicy">预览权益</button>
+              <button class="primary" :disabled="busy">保存版本 {{ policyVersion }}</button>
+              <button type="button" :disabled="busy" @click="loadPage">重新加载</button>
             </div>
           </form>
         </template>
 
         <template v-else>
-          <h1>Agent 協作</h1>
-          <section v-if="viewer.role >= 10" class="card"><h2>Arca MCP</h2><p>使用 New API 的細粒度管理權杖，讓你授權的 Agent 查看回饋與請求診斷。</p><pre>/mcp</pre>
-            <a href="/profile" class="secondary"><BookOpen :size="17" /> 管理存取權杖</a>
+          <h1>Agent 协作</h1>
+          <section v-if="viewer.role >= 10" class="card"><h2>Arca MCP</h2><p>使用 New API 的细粒度管理令牌，授权 Agent 查看反馈和请求诊断。</p><pre>/mcp</pre>
+            <a href="/profile" class="secondary"><BookOpen :size="17" /> 管理访问令牌</a>
           </section>
-          <p v-else class="muted">管理員可以為授權的 Agent 設定 MCP 工具。</p>
+          <p v-else class="muted">管理员可以为获授权的 Agent 配置 MCP 工具。</p>
         </template>
       </div>
     </div>
