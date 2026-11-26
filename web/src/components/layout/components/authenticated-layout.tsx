@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { CommandMenu } from '@/components/command-menu'
 import { AnimatedOutlet } from '@/components/page-transition'
-import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
@@ -26,8 +25,8 @@ import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { ConsoleToolbar } from './console-toolbar'
 import { ProductBackdrop } from './product-backdrop'
 
 type AuthenticatedLayoutProps = {
@@ -45,10 +44,12 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
       <SearchProvider>
         <SidebarProvider
           defaultOpen={defaultOpen}
-          className='bg-background has-data-[variant=inset]:bg-background flex-col [--app-header-height:3.5rem]'
+          className={cn(
+            'bg-background has-data-[variant=inset]:bg-background flex-col pt-[var(--site-header-height,4rem)]',
+            '[--console-toolbar-height:2.5rem] [--app-header-height:calc(var(--site-header-height,4rem)_+_var(--console-toolbar-height))]'
+          )}
         >
-          <SkipToMain />
-          <AppHeader />
+          <ConsoleToolbar />
           <div className='flex min-h-0 w-full flex-1'>
             <AppSidebar />
             <SidebarInset

@@ -21,7 +21,6 @@ For commercial licensing, please contact support@quantumnous.com
  */
 
 // Core components
-export { AppHeader } from './components/app-header'
 export { AppSidebar } from './components/app-sidebar'
 export { AuthenticatedLayout } from './components/authenticated-layout'
 export { PublicLayout } from './components/public-layout'
@@ -29,14 +28,12 @@ export { PublicHeader } from './components/public-header'
 export { PublicNavigation } from './components/public-navigation'
 export { HeaderLogo } from './components/header-logo'
 export { NavLinkItem, NavLinkList } from './components/nav-link-item'
-export { Header } from './components/header'
 export { Main } from './components/main'
 export { PageFooterPortal } from './components/page-footer'
 export { NavGroup } from './components/nav-group'
 export { SectionPageLayout } from './components/section-page-layout'
 export { SidebarViewHeader } from './components/sidebar-view-header'
 export { SystemBrand } from './components/system-brand'
-export { TopNav } from './components/top-nav'
 export { MobileDrawer } from './components/mobile-drawer'
 
 // Configuration

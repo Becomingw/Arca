@@ -23,6 +23,7 @@ import { resolveAuthentication } from '@/lib/auth-session'
 import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute('/_authenticated')({
+  staticData: { siteNavigation: 'console' },
   beforeLoad: async ({ location }) => {
     // The root guard may have skipped its refresh because no session hint was
     // present. That skip is an optimization for public pages and must not

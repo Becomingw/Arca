@@ -32,6 +32,7 @@ const rankingsSearchSchema = z.object({
 })
 
 export const Route = createFileRoute('/rankings/')({
+  staticData: { siteNavigation: 'public' },
   validateSearch: rankingsSearchSchema,
   beforeLoad: async ({ context, location, search }) => {
     const access = await getModuleAccessForGuard(

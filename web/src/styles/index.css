@@ -53,7 +53,12 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 @layer base {
+  html:has(#site-header) {
+    scrollbar-gutter: stable;
+  }
+
   :root {
+    --site-header-height: 4rem;
     /* Mobile browser toolbars change dvh; 50% positioning and vh still use
        the layout viewport and can place dialog actions behind those bars. */
     --dialog-inset-top: max(1rem, env(safe-area-inset-top, 0px));

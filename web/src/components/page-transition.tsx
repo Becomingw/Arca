@@ -47,7 +47,7 @@ export function PageTransition(props: PageTransitionProps) {
     <motion.div
       initial={MOTION_VARIANTS.pageEnter.initial}
       animate={MOTION_VARIANTS.pageEnter.animate}
-      transition={MOTION_TRANSITION.default}
+      transition={MOTION_TRANSITION.fast}
       className={props.className}
     >
       {props.children}
@@ -132,7 +132,7 @@ export function TableStaggerContainer(props: StaggerContainerProps) {
   const shouldReduce = useReducedMotion()
 
   if (shouldReduce) {
-    return <>{props.children}</>
+    return props.children
   }
 
   return (

@@ -37,6 +37,7 @@ const pricingSearchSchema = z.object({
 })
 
 export const Route = createFileRoute('/pricing/')({
+  staticData: { siteNavigation: 'public' },
   validateSearch: pricingSearchSchema,
   beforeLoad: async ({ context, location }) => {
     const access = await getModuleAccessForGuard(context.queryClient, 'pricing')

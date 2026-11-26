@@ -16,24 +16,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { SidebarTrigger } from '@/components/ui/sidebar'
-import { cn } from '@/lib/utils'
+import { useRouterState } from '@tanstack/react-router'
 
-type HeaderProps = React.HTMLAttributes<HTMLElement>
+import { SkipToMain } from '@/components/skip-to-main'
 
-export function Header({ className, children, ...props }: HeaderProps) {
+import { PublicHeader } from './public-header'
+
+declare module '@tanstack/react-router' {
+  interface StaticDataRouteOption {
+    siteNavigation?: 'public' | 'console'
+  }
+}
+
+export function SiteNavigation() {
+  const section = useRouterState({
+    select: ({ matches }) =>
+      matches.find((match) => match.staticData.siteNavigation)?.staticData
+        .siteNavigation,
+  })
+
+  if (!section) return null
   return (
-    <header
-      className={cn(
-        'border-border/70 bg-background/80 sticky top-0 z-40 h-[var(--app-header-height,3rem)] w-full shrink-0 border-b backdrop-blur-xl',
-        className
-      )}
-      {...props}
-    >
-      <div className='flex h-full items-center gap-1.5 px-2.5 sm:gap-2 sm:px-4 lg:px-5'>
-        <SidebarTrigger variant='ghost' className='size-8 rounded-lg' />
-        {children}
-      </div>
-    </header>
+    <>
+      {section === 'console' && <SkipToMain />}
+      <PublicHeader consoleActive={section === 'console'} />
+    </>
   )
 }
