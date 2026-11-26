@@ -29,7 +29,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import dayjs from '@/lib/dayjs'
-import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
+import { formatQuotaUnits, formatTimestampToDate } from '@/lib/format'
 
 import type { UsageLog } from '../data/schema'
 import { formatModelName, logTokenName, parseLogOther } from '../lib/format'
@@ -83,8 +83,8 @@ export function CommonLogMobileCard<TData>(props: {
       visible: displayable && props.cells.has('model_name') && !!model.name,
     },
     cost: {
-      label: t('Cost'),
-      value: formatLogQuota(log.quota),
+      label: t('Usage units'),
+      value: formatQuotaUnits(log.quota),
       visible: displayable && props.cells.has('quota'),
     },
     time: {

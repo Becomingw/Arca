@@ -52,6 +52,7 @@ export interface ModelCardProps {
   usdExchangeRate?: number
   tokenUnit?: TokenUnit
   showRechargePrice?: boolean
+  usageUnits?: boolean
   selectedGroup?: string
   perf?: ModelPerfBadgeData
 }
@@ -74,11 +75,15 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
   const isUnconfiguredTaskUsage = isUnconfiguredTaskUsageModel(model)
   const billingTime = useBillingTime(model.billing_expr)
-  const currency = useSystemConfigStore((state) => state.config.currency)
+  const currency = useSystemConfigStore((state) =>
+    props.usageUnits ? undefined : state.config.currency
+  )
+  const presentation = props.usageUnits ? 'usage' : 'currency'
   const dynamicPriceOptions = useMemo(
     () => ({
       now: billingTime === undefined ? undefined : new Date(billingTime),
       tokenUnit,
+      usageUnits: props.usageUnits,
       showRechargePrice,
       priceRate,
       usdExchangeRate,
@@ -92,6 +97,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       props.selectedGroup,
       billingTime,
       tokenUnit,
+      props.usageUnits,
       showRechargePrice,
       priceRate,
       usdExchangeRate,
@@ -240,7 +246,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             showRechargePrice,
             priceRate,
             usdExchangeRate,
-            props.selectedGroup
+            props.selectedGroup,
+            presentation
           )}
           <span className='text-muted-foreground text-xs font-normal'>
             {' '}
@@ -258,7 +265,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             showRechargePrice,
             priceRate,
             usdExchangeRate,
-            props.selectedGroup
+            props.selectedGroup,
+            presentation
           )}
           <span className='text-muted-foreground text-xs font-normal'>
             {' '}
@@ -330,10 +338,17 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         </div>
         <div
           role='group'
-          aria-label={t('Pricing')}
+          aria-label={props.usageUnits ? t('Model usage rates') : t('Pricing')}
           className='mt-auto flex min-w-0 flex-col gap-1.5'
         >
-          <ModelBillingModeBadge model={props.model} appearance='caption' />
+          <div className='flex flex-wrap items-baseline justify-between gap-x-2'>
+            <ModelBillingModeBadge model={props.model} appearance='caption' />
+            {props.usageUnits && (
+              <span className='text-muted-foreground text-xs'>
+                {t('Usage units')}
+              </span>
+            )}
+          </div>
           {dynamicSummary?.providerCount && (
             <span className='text-muted-foreground text-xs break-words'>
               {t('{{count}} providers', {

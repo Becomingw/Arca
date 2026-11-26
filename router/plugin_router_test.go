@@ -521,7 +521,6 @@ func TestBuiltInPluginRoutesAreServedBesideHostRoutes(t *testing.T) {
 	// The static routes SetRouter registers before the plugin router.
 	outer := gin.New()
 	SetApiRouter(outer)
-	SetDashboardRouter(outer)
 	SetRelayRouter(outer)
 	SetTaskPluginProtocolRouter(outer)
 	SetVideoRouter(outer)

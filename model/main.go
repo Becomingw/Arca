@@ -384,6 +384,8 @@ func migrateDB() error {
 		&ArcaEntitlementPolicyRow{},
 		&ArcaBudgetAccount{},
 		&ArcaBudgetReservation{},
+		&ArcaUsageGrant{},
+		&ArcaBudgetGrantUse{},
 		&ArcaMCPConfirmation{},
 	)
 	if err != nil {

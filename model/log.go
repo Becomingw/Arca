@@ -594,7 +594,7 @@ func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*Log, total int64, err error) {
-	tx, err := filter.apply(LOG_DB.Where("logs.user_id = ?", userId))
+	tx, err := filter.apply(LOG_DB.Where("logs.user_id = ? AND logs.type <> ?", userId, LogTypeTopup))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -649,7 +649,7 @@ func StreamAllLogs(ctx context.Context, filter LogFilter, role int, fn func(*Log
 // StreamUserLogs is StreamAllLogs for one user's own logs, shaped like the
 // user log list.
 func StreamUserLogs(ctx context.Context, userId int, filter LogFilter, fn func(*Log) error) error {
-	tx, err := filter.apply(LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId))
+	tx, err := filter.apply(LOG_DB.WithContext(ctx).Where("logs.user_id = ? AND logs.type <> ?", userId, LogTypeTopup))
 	if err != nil {
 		return err
 	}

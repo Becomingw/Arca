@@ -259,14 +259,14 @@ it('collapses only date and statistics while keeping the right-hand quick action
     screen
       .getByRole('button', { name: /^\d{4}-\d{2}/ })
       .getAttribute('aria-label') ?? ''
-  expect(await screen.findByText('Usage')).toBeVisible()
+  expect(await screen.findByText('Usage units')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Collapse' }))
   expect(screen.getByRole('button', { name: 'Expand' })).toHaveAttribute(
     'aria-expanded',
     'false'
   )
   expect(screen.queryByRole('button', { name: date })).not.toBeInTheDocument()
-  expect(screen.queryByText('Usage')).not.toBeInTheDocument()
+  expect(screen.queryByText('Usage units')).not.toBeInTheDocument()
   const actions = screen.getByRole('group', { name: 'Actions' })
   for (const name of ['Hide', 'Filter', 'Search', 'Export', 'View']) {
     expect(within(actions).getByRole('button', { name })).toBeVisible()
@@ -280,7 +280,7 @@ it('collapses only date and statistics while keeping the right-hand quick action
     'true'
   )
   expect(screen.getByRole('button', { name: date })).toBeVisible()
-  expect(await screen.findByText('Usage')).toBeVisible()
+  expect(await screen.findByText('Usage units')).toBeVisible()
 })
 
 it.each([

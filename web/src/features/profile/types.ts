@@ -98,10 +98,6 @@ export type NotifyType = 'email' | 'webhook' | 'bark' | 'gotify'
 export interface UserSettings {
   /** Notification type */
   notify_type?: NotifyType
-  /** Quota warning threshold in quota units; 0 or absent uses the site default */
-  quota_warning_threshold?: number
-  /** Receive low balance reminders; absent means on */
-  quota_warning_enabled?: boolean
   /** Webhook URL */
   webhook_url?: string
   /** Webhook secret */
@@ -155,8 +151,6 @@ export interface EmailBindingFlow extends AccountSecurityResult {
  */
 export interface UpdateUserSettingsRequest {
   notify_type?: string
-  quota_warning_threshold?: number
-  quota_warning_enabled?: boolean
   webhook_url?: string
   webhook_secret?: string
   notification_email?: string
@@ -190,52 +184,4 @@ export interface TwoFAStatus {
   enabled: boolean
   locked: boolean
   backup_codes_remaining: number
-}
-
-// ============================================================================
-// Checkin Type Definitions
-// ============================================================================
-
-/**
- * Checkin record for a specific date
- */
-export interface CheckinRecord {
-  /** Check-in date (YYYY-MM-DD) */
-  checkin_date: string
-  /** Quota awarded for this check-in */
-  quota_awarded: number
-}
-
-/**
- * Checkin statistics
- */
-export interface CheckinStats {
-  /** Whether user has checked in today */
-  checked_in_today: boolean
-  /** Total number of check-ins */
-  total_checkins: number
-  /** Total quota earned from check-ins */
-  total_quota: number
-  /** Current month check-in count */
-  checkin_count: number
-  /** Check-in records for the queried month */
-  records: CheckinRecord[]
-}
-
-/**
- * Check-in status response
- */
-export interface CheckinStatusResponse {
-  /** Whether check-in feature is enabled */
-  enabled: boolean
-  /** Check-in statistics */
-  stats: CheckinStats
-}
-
-/**
- * Check-in action response
- */
-export interface CheckinResponse {
-  /** Quota awarded for this check-in */
-  quota_awarded: number
 }

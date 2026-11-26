@@ -334,7 +334,7 @@ test.each([true, false])(
       { model_price: 0.25, admin_info: { task_plugin: plugin } },
       isAdmin
     )
-    expect(preview.textContent).toBe('Per-call · $0.25')
+    expect(preview.textContent).toBe(isAdmin ? 'Per-call · $0.25' : 'Details')
     fireEvent.click(preview)
     const dialog = within(await screen.findByRole('dialog'))
     if (isAdmin) {

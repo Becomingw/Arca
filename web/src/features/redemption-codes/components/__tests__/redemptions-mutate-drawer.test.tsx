@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   fireEvent,
   render,
@@ -62,6 +63,9 @@ type CurrencyFixture = {
   usdExchangeRate: number
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+})
 const apiClient = api as unknown as MockableApi
 const originalGet = apiClient.get
 const originalPut = apiClient.put
@@ -96,13 +100,15 @@ function deferred<T>() {
 function drawerTree(currentRow: Redemption, open = true) {
   return (
     <I18nextProvider i18n={i18n}>
-      <RedemptionsProvider>
-        <RedemptionsMutateDrawer
-          open={open}
-          currentRow={currentRow}
-          onOpenChange={() => undefined}
-        />
-      </RedemptionsProvider>
+      <QueryClientProvider client={queryClient}>
+        <RedemptionsProvider>
+          <RedemptionsMutateDrawer
+            open={open}
+            currentRow={currentRow}
+            onOpenChange={() => undefined}
+          />
+        </RedemptionsProvider>
+      </QueryClientProvider>
       <Toaster duration={60_000} />
     </I18nextProvider>
   )
@@ -144,8 +150,7 @@ function getSaveButton(): HTMLButtonElement {
 }
 
 function getControlByLabel(labelText: 'Name'): HTMLInputElement
-function getControlByLabel(labelText: 'Quota (CNY)'): HTMLInputElement
-function getControlByLabel(labelText: 'Quota (USD)'): HTMLInputElement
+function getControlByLabel(labelText: 'Usage units'): HTMLInputElement
 function getControlByLabel(labelText: string): HTMLElement {
   const label = [...document.querySelectorAll<HTMLLabelElement>('label')].find(
     (candidate) => candidate.textContent?.trim() === labelText
@@ -181,6 +186,7 @@ async function waitForLoadedForm(): Promise<void> {
 }
 
 afterEach(() => {
+  queryClient.clear()
   apiClient.get = originalGet
   apiClient.put = originalPut
   Reflect.set(console, 'log', originalConsoleLog)
@@ -190,7 +196,7 @@ afterEach(() => {
 })
 
 describe('redemption drawer', () => {
-  test('shows the reported CNY quota without floating-point noise', async () => {
+  test('displays neutral usage units regardless of the configured currency', async () => {
     const original = redemption(1, 13888889)
     apiClient.get = async () => ({ data: { success: true, data: original } })
 
@@ -200,7 +206,7 @@ describe('redemption drawer', () => {
     })
     await waitForLoadedForm()
 
-    expect(getControlByLabel('Quota (CNY)').value).toBe('200')
+    expect(getControlByLabel('Usage units').value).toBe('27.777778')
   })
 
   test('blocks updates and reports an error when loading rejects', async () => {
@@ -254,7 +260,7 @@ describe('redemption drawer', () => {
 
     await renderDrawer(original)
     await waitForLoadedForm()
-    expect(getControlByLabel('Quota (USD)').value).toBe('1')
+    expect(getControlByLabel('Usage units').value).toBe('1.000002')
 
     changeInput(getControlByLabel('Name'), 'renamed')
     submitForm()
@@ -276,11 +282,58 @@ describe('redemption drawer', () => {
 
     await renderDrawer(original)
     await waitForLoadedForm()
-    changeInput(getControlByLabel('Quota (USD)'), '2')
+    changeInput(getControlByLabel('Usage units'), '2')
     submitForm()
     await waitFor(() => expect(updates).toHaveLength(1))
 
     expect(updates[0]?.quota).toBe(1000000)
+  })
+
+  test('uses catalog aliases and keeps grant duration separate from the code deadline', async () => {
+    const original = { ...redemption(1), expired_time: 2000000000 }
+    const updates: unknown[] = []
+    apiClient.get = async (url) => ({
+      data: {
+        success: true,
+        data: url.endsWith('/scopes')
+          ? {
+              models: ['provider/a', 'provider/b'],
+              families: { fast: 'Fast models' },
+            }
+          : original,
+      },
+    })
+    apiClient.put = async (_url, data) => {
+      updates.push(data)
+      return { data: { success: true } }
+    }
+    await renderDrawer(original)
+    await waitForLoadedForm()
+
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Eligible models' }),
+      {
+        target: { value: 'models' },
+      }
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'provider/a' }))
+    const aliasInput = screen.getByRole('textbox', { name: 'Model aliases' })
+    fireEvent.change(aliasInput, { target: { value: ' provider/custom ' } })
+    fireEvent.keyDown(aliasInput, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: '1 hour' }))
+    submitForm()
+
+    await waitFor(() =>
+      expect(updates).toEqual([
+        expect.objectContaining({
+          expired_time: 2000000000,
+          grant: {
+            models: ['provider/a', 'provider/custom'],
+            valid_for_seconds: 3600,
+          },
+        }),
+      ])
+    )
   })
 
   test('keeps a non-expiring code unchanged after closing an expiring code', async () => {

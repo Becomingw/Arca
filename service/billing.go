@@ -56,7 +56,7 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 	}
 	var session *BillingSession
 	var apiErr *types.NewAPIError
-	if budget != nil && budget.entitlement.effective.Allocation.InternalFunding {
+	if budget != nil {
 		session = &BillingSession{relayInfo: relayInfo, funding: organizationFunding{}}
 		apiErr = session.preConsume(c, preConsumedQuota)
 	} else {
@@ -111,7 +111,7 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 		}
 
 		// 发送额度通知（订阅计费使用订阅剩余额度）
-		if actualQuota != 0 {
+		if actualQuota != 0 && !model.ArcaEntitlementRuntimeEnabled() {
 			switch relayInfo.BillingSource {
 			case BillingSourceSubscription:
 				checkAndSendSubscriptionQuotaNotify(relayInfo)

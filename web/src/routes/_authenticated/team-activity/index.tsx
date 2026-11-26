@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute } from '@tanstack/react-router'
-
-import { TeamActivity } from '@/features/profile/team-activity'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/team-activity/')({
-  component: TeamActivity,
+  beforeLoad: () => {
+    throw redirect({ to: '/rankings', search: { tab: 'team' }, replace: true })
+  },
 })

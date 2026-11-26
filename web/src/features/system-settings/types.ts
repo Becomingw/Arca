@@ -65,17 +65,6 @@ export interface UpdatePasskeyDomainsResponse extends UpdateOptionResponse {
   data: PasskeyDomainChange
 }
 
-export type ConfirmPaymentComplianceResponse = {
-  success: boolean
-  message: string
-  data?: {
-    confirmed: boolean
-    terms_version: string
-    confirmed_at: number
-    confirmed_by: number
-  }
-}
-
 export type SystemTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
 export type SystemTask<
@@ -258,7 +247,6 @@ export type ModelSettings = {
   'billing_setting.billing_expr': string
   'billing_setting.plugin_billing_expr': string
   'tool_price_setting.prices': string
-  TopupGroupRatio: string
   GroupRatio: string
   UserUsableGroups: string
   GroupGroupRatio: string
@@ -271,12 +259,7 @@ export type ModelSettings = {
 }
 
 export type BillingSettings = {
-  QuotaForNewUser: number
-  QuotaForInviter: number
-  QuotaForInvitee: number
-  TopUpLink: string
   'quota_setting.enable_free_model_pre_consume': boolean
-  'quota_setting.trust_quota_usd': number
   'quota_setting.pre_consume_multiplier': number
   QuotaPerUnit: number
   USDExchangeRate: number
@@ -298,7 +281,6 @@ export type BillingSettings = {
   'billing_setting.billing_expr': string
   'billing_setting.plugin_billing_expr': string
   'tool_price_setting.prices': string
-  TopupGroupRatio: string
   GroupRatio: string
   UserUsableGroups: string
   GroupGroupRatio: string
@@ -306,66 +288,14 @@ export type BillingSettings = {
   MaxTokenAutoGroups: number
   DefaultUseAutoGroup: boolean
   'group_ratio_setting.group_special_usable_group': string
-  PayAddress: string
-  EpayId: string
-  EpayKey: string
-  Price: number
-  MinTopUp: number
-  CustomCallbackAddress: string
-  PayMethods: string
-  'payment_setting.amount_options': string
-  'payment_setting.amount_discount': string
-  'payment_setting.epay_sign_type': string
-  'payment_setting.epay_merchant_private_key': string
-  'payment_setting.epay_platform_public_key': string
-  'payment_setting.compliance_confirmed': boolean
-  'payment_setting.compliance_terms_version': string
-  'payment_setting.compliance_confirmed_at': number
-  'payment_setting.compliance_confirmed_by': number
-  'payment_setting.compliance_confirmed_ip': string
-  StripeApiSecret: string
-  StripeWebhookSecret: string
-  StripePriceId: string
-  StripeUnitPrice: number
-  StripeMinTopUp: number
-  StripePromotionCodesEnabled: boolean
-  CreemApiKey: string
-  CreemWebhookSecret: string
-  CreemTestMode: boolean
-  CreemProducts: string
-  WaffoEnabled: boolean
-  WaffoApiKey: string
-  WaffoPrivateKey: string
-  WaffoPublicCert: string
-  WaffoSandboxPublicCert: string
-  WaffoSandboxApiKey: string
-  WaffoSandboxPrivateKey: string
-  WaffoSandbox: boolean
-  WaffoMerchantId: string
-  WaffoCurrency: string
-  WaffoUnitPrice: number
-  WaffoMinTopUp: number
-  WaffoNotifyUrl: string
-  WaffoReturnUrl: string
-  WaffoPayMethods: string
-  WaffoPancakeMerchantID: string
-  WaffoPancakePrivateKey: string
-  WaffoPancakeReturnURL: string
   // Bound by the operator through the catalog flow in the admin Pancake
   // section (saved via /api/option/waffo-pancake/save).
-  WaffoPancakeStoreID: string
-  WaffoPancakeProductID: string
-  'checkin_setting.enabled': boolean
-  'checkin_setting.min_quota': number
-  'checkin_setting.max_quota': number
 }
 
 export type OperationsSettings = {
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean
-  QuotaRemindEnabled: boolean
-  QuotaRemindThreshold: string
   EmailProvider: 'smtp' | 'resend'
   ResendApiKey: string
   ResendKeyConfigured: boolean

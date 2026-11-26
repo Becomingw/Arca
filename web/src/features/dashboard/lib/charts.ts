@@ -25,6 +25,7 @@ import type {
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
 import { getCurrencyDisplay } from '@/lib/currency'
+import { formatQuotaUnits } from '@/lib/format'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
 type TFunction = (key: string) => string
@@ -50,20 +51,6 @@ export function getDashboardChartColors(domainLength: number): string[] {
   )
 }
 
-function renderQuotaCompat(rawQuota: number, digits = 4): string {
-  const { config, meta } = getCurrencyDisplay()
-  if (meta.kind === 'tokens') return rawQuota.toLocaleString()
-  const usd = rawQuota / config.quotaPerUnit
-  const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
-  const symbol = 'symbol' in meta ? meta.symbol : '$'
-  const value = usd * rate
-  const fixed = value.toFixed(digits)
-  if (Number.parseFloat(fixed) === 0 && rawQuota > 0 && value > 0) {
-    return symbol + Math.pow(10, -digits).toFixed(digits)
-  }
-  return symbol + fixed
-}
-
 /**
  * Process and aggregate chart data
  */
@@ -78,8 +65,6 @@ export function processChartData(
 
   const formatInt = (value: number) =>
     Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
-  const formatQuotaValue = (value: number) => renderQuotaCompat(value, 4)
-  const formatQuotaTotal = (value: number) => renderQuotaCompat(value, 2)
 
   const MAX_TOOLTIP_MODELS = 15
   const isOtherTooltipKey = (key: string) =>
@@ -106,7 +91,7 @@ export function processChartData(
           sum =
             Number((array[i].datum as Record<string, unknown>)?.TimeSum) || sum
         }
-        array[i].value = formatQuotaValue(v)
+        array[i].value = formatQuotaUnits(v)
       }
 
       if (collapseOverflow && array.length > MAX_TOOLTIP_MODELS) {
@@ -124,7 +109,7 @@ export function processChartData(
           ...visible,
           {
             key: otherLabel,
-            value: formatQuotaValue(otherSum),
+            value: formatQuotaUnits(otherSum),
             hasShape: true,
             shapeType: 'square',
             shapeFill: otherTooltipColor,
@@ -136,7 +121,7 @@ export function processChartData(
 
       array.unshift({
         key: tt('Total:'),
-        value: formatQuotaValue(sum),
+        value: formatQuotaUnits(sum),
       })
       return array
     }
@@ -207,7 +192,7 @@ export function processChartData(
           text: tt('Call Count Ranking'),
         },
       },
-      totalQuotaDisplay: formatQuotaTotal(0),
+      totalQuotaDisplay: formatQuotaUnits(0),
       totalCountDisplay: formatInt(0),
     }
   }
@@ -320,7 +305,7 @@ export function processChartData(
     }))
     .sort((a, b) => b.value - a.value)
 
-  // Stacked bar: model quota distribution (quota -> USD)
+  // Stacked bar: model quota distribution (quota -> usage units)
   const lineValues: Array<{
     Time: string
     Model: string
@@ -333,9 +318,7 @@ export function processChartData(
     let timeData = sortedModels.map((model) => {
       const stats = timeModelMap.get(time)?.get(model)
       const rawQuota = Number(stats?.quota) || 0
-      const usd = rawQuota ? rawQuota / quotaPerUnit : 0
-      // Match legacy frontend getQuotaWithUnit(..., 4)
-      const usage = usd ? Number(usd.toFixed(4)) : 0
+      const usage = Number((rawQuota / quotaPerUnit).toFixed(4))
       return {
         Time: time,
         Model: model,
@@ -371,8 +354,7 @@ export function processChartData(
     sortedModels.forEach((model) => {
       const stats = modelMap?.get(model)
       const rawQuota = Number(stats?.quota) || 0
-      const usd = rawQuota ? rawQuota / quotaPerUnit : 0
-      const usage = usd ? Number(usd.toFixed(4)) : 0
+      const usage = Number((rawQuota / quotaPerUnit).toFixed(4))
       timeSum += rawQuota
       const key = topAreaModels.has(model) ? model : otherLabel
       const prev = buckets.get(key) || { rawQuota: 0, usage: 0 }
@@ -513,7 +495,7 @@ export function processChartData(
             {
               key: (datum: Record<string, unknown>) => datum?.Model,
               value: (datum: Record<string, unknown>) =>
-                formatQuotaValue(Number(datum?.rawQuota) || 0),
+                formatQuotaUnits(Number(datum?.rawQuota) || 0),
             },
           ],
         },
@@ -546,7 +528,7 @@ export function processChartData(
             {
               key: (datum: Record<string, unknown>) => datum?.Model,
               value: (datum: Record<string, unknown>) =>
-                formatQuotaValue(Number(datum?.rawQuota) || 0),
+                formatQuotaUnits(Number(datum?.rawQuota) || 0),
             },
           ],
         },
@@ -688,7 +670,7 @@ export function processChartData(
       background: { fill: 'transparent' },
       animation: true,
     },
-    totalQuotaDisplay: formatQuotaTotal(totalQuotaRaw),
+    totalQuotaDisplay: formatQuotaUnits(totalQuotaRaw),
     totalCountDisplay: formatInt(totalTimes),
   }
 }
@@ -715,8 +697,6 @@ export function processUserChartData(
   const tt: TFunction = t ?? ((x) => x)
   const { config } = getCurrencyDisplay()
   const quotaPerUnit = config.quotaPerUnit
-
-  const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
 
   const emptyResult: ProcessedUserChartData = {
     spec_user_rank: {
@@ -831,7 +811,7 @@ export function processUserChartData(
       title: {
         visible: true,
         text: tt('User Consumption Ranking'),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatQuotaUnits(totalQuota)}`,
       },
       legends: { visible: false },
       bar: {
@@ -840,7 +820,7 @@ export function processUserChartData(
       label: {
         visible: true,
         position: 'outside',
-        formatMethod: (value: number) => formatVal(value),
+        formatMethod: (value: number) => formatQuotaUnits(value),
         style: { fontSize: 11 },
       },
       axes: [
@@ -853,7 +833,7 @@ export function processUserChartData(
             {
               key: (datum: Record<string, unknown>) => datum?.User,
               value: (datum: Record<string, unknown>) =>
-                formatVal(Number(datum?.rawQuota) || 0),
+                formatQuotaUnits(Number(datum?.rawQuota) || 0),
             },
           ],
           updateContent: (
@@ -867,7 +847,7 @@ export function processUserChartData(
               const rawQuota = array[i].datum?.rawQuota
               const value =
                 rawQuota === undefined ? array[i].value : Number(rawQuota)
-              array[i].value = formatVal(Number(value) || 0)
+              array[i].value = formatQuotaUnits(Number(value) || 0)
             }
             return array
           },
@@ -887,7 +867,7 @@ export function processUserChartData(
       title: {
         visible: true,
         text: tt('User Consumption Trend'),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatQuotaUnits(totalQuota)}`,
       },
       legends: { visible: true, selectMode: 'single' },
       axes: [
@@ -896,7 +876,7 @@ export function processUserChartData(
           orient: 'left',
           type: 'linear',
           label: {
-            formatMethod: (value: number) => formatVal(value),
+            formatMethod: (value: number) => formatQuotaUnits(value),
           },
         },
       ],
@@ -906,7 +886,7 @@ export function processUserChartData(
             {
               key: (datum: Record<string, unknown>) => datum?.User,
               value: (datum: Record<string, unknown>) =>
-                formatVal(Number(datum?.rawQuota) || 0),
+                formatQuotaUnits(Number(datum?.rawQuota) || 0),
             },
           ],
         },
@@ -931,11 +911,11 @@ export function processUserChartData(
             for (let i = 0; i < array.length; i++) {
               const v = Number(array[i].value) || 0
               sum += v
-              array[i].value = formatVal(v)
+              array[i].value = formatQuotaUnits(v)
             }
             array.unshift({
               key: tt('Total:'),
-              value: formatVal(sum),
+              value: formatQuotaUnits(sum),
             })
             return array
           },

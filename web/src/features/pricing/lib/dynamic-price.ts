@@ -43,6 +43,7 @@ import {
 } from './cache-pricing'
 import { getDisplayGroupRatio } from './model-helpers'
 import { withPluginPricing } from './plugin-pricing'
+import { formatUsageRate } from './price'
 import {
   evaluateTaskVisualConfig,
   getTaskNumberFields,
@@ -55,6 +56,7 @@ export type DynamicPriceOptions = {
   cachePricingMode?: CachePricingMode
   tokenUnit: TokenUnit
   showCurrencySymbol?: boolean
+  usageUnits?: boolean
   showRechargePrice?: boolean
   priceRate?: number
   usdExchangeRate?: number
@@ -215,6 +217,7 @@ export function formatDynamicUnitPrice(
   const priceUSD =
     (valuePerMillionTokens * groupRatio) /
     TOKEN_UNIT_DIVISORS[options.tokenUnit]
+  if (options.usageUnits) return formatUsageRate(priceUSD)
   const displayPrice = applyRechargeRate(
     priceUSD,
     options.showRechargePrice ?? false,
@@ -238,6 +241,7 @@ export function formatTaskUsageUnitPrice(
   const priceRate = options.priceRate ?? 1
   const usdExchangeRate = options.usdExchangeRate ?? 1
   const priceUSD = valuePerUnit * groupRatio
+  if (options.usageUnits) return formatUsageRate(priceUSD)
   const displayPrice = applyRechargeRate(
     priceUSD,
     options.showRechargePrice ?? false,

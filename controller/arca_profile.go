@@ -157,39 +157,97 @@ func GetArcaHeatmap(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{"available": common.DataExportEnabled, "timezone": "UTC", "days": points})
 }
 
+type arcaRankedMember struct {
+	ID               string `json:"id"`
+	Label            string `json:"label"`
+	Anonymous        bool   `json:"anonymous"`
+	Rank             int    `json:"rank"`
+	EstimatedMinutes int64  `json:"estimated_minutes"`
+	ActiveDays       int    `json:"active_days"`
+	LongestStreak    int    `json:"longest_streak"`
+	ActiveToday      bool   `json:"active_today"`
+	Requests         *int64 `json:"requests"`
+	Tokens           *int64 `json:"tokens"`
+}
+
+type arcaActivityDaySummary struct {
+	days, currentStreak, longestStreak int
+	lastDay                            int64
+}
+
 func GetArcaTeamActivity(c *gin.Context) {
 	days, ok := arcaFeedbackQueryInt(c, "days", 7, 1, 30)
 	if !ok || (days != 7 && days != 30) {
 		arcaFeedbackHTTPError(c, http.StatusBadRequest, "Invalid parameters", "ARCA_ACTIVITY_INVALID")
 		return
 	}
-	end := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-	members, err := model.ReadArcaActivity(c.Request.Context(), end.AddDate(0, 0, -int(days)).Unix(), end.Unix())
+	ctx := c.Request.Context()
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	end := today.AddDate(0, 0, 1)
+	startAt, endAt := end.AddDate(0, 0, -int(days)).Unix(), end.Unix()
+	members, err := model.ReadArcaActivity(ctx, startAt, endAt)
 	if err != nil {
 		arcaFeedbackStorageError(c, err)
 		return
 	}
-	type member struct {
-		ID               string `json:"id"`
-		Label            string `json:"label"`
-		Rank             int    `json:"rank"`
-		EstimatedMinutes int64  `json:"estimated_minutes"`
-	}
-	rows := make([]member, 0, 20)
-	if len(members) < 3 {
-		common.ApiSuccess(c, gin.H{"members": rows, "suppressed": true, "timezone": "UTC"})
+	rows := make([]arcaRankedMember, 0, len(members))
+	popular := make([]model.ArcaModelUsage, 0)
+	bands := make([]model.ArcaActivityBand, 0)
+	suppressed := len(members) < model.ArcaActivityMinimumMembers
+	usageAvailable := common.DataExportEnabled
+	if suppressed {
+		common.ApiSuccess(c, gin.H{"members": rows, "popular_models": popular, "activity_bands": bands, "suppressed": true, "usage_available": usageAvailable, "timezone": "UTC"})
 		return
 	}
-	members = members[:min(20, len(members))]
 	userIDs := make([]int, 0, len(members))
 	for _, entry := range members {
 		userIDs = append(userIDs, entry.UserID)
 	}
-	names, err := model.ReadArcaActivityNames(c.Request.Context(), userIDs)
+	names, err := model.ReadArcaActivityNames(ctx, userIDs)
 	if err != nil {
 		arcaFeedbackStorageError(c, err)
 		return
 	}
+	memberDays, err := model.ReadArcaActivityDays(ctx, userIDs, startAt, endAt)
+	if err != nil {
+		arcaFeedbackStorageError(c, err)
+		return
+	}
+	bands, err = model.ReadArcaActivityBands(ctx, startAt, endAt)
+	if err != nil {
+		arcaFeedbackStorageError(c, err)
+		return
+	}
+	daySummary := make(map[int]arcaActivityDaySummary, len(members))
+	for _, day := range memberDays {
+		summary := daySummary[day.UserID]
+		summary.days++
+		if summary.lastDay+86400 == day.DayAt {
+			summary.currentStreak++
+		} else {
+			summary.currentStreak = 1
+		}
+		summary.longestStreak = max(summary.longestStreak, summary.currentStreak)
+		summary.lastDay = day.DayAt
+		daySummary[day.UserID] = summary
+	}
+	usage := make(map[int]model.ArcaMemberUsage)
+	if usageAvailable {
+		memberUsage, err := model.ReadArcaMemberUsage(ctx, userIDs, startAt, endAt)
+		if err != nil {
+			arcaFeedbackStorageError(c, err)
+			return
+		}
+		for _, entry := range memberUsage {
+			usage[entry.UserID] = entry
+		}
+		popular, err = model.ReadArcaPopularModels(ctx, startAt, endAt)
+		if err != nil {
+			arcaFeedbackStorageError(c, err)
+			return
+		}
+	}
+
 	rank := 0
 	var previous int64
 	for i, entry := range members {
@@ -198,12 +256,19 @@ func GetArcaTeamActivity(c *gin.Context) {
 			previous = entry.Windows
 		}
 		label := names[entry.UserID]
-		if label == "" {
+		anonymous := label == ""
+		if anonymous {
 			label = fmt.Sprintf("Member %03d", i+1)
 		}
-		rows = append(rows, member{
-			ID: "member-" + strconv.Itoa(i+1), Label: label, Rank: rank, EstimatedMinutes: entry.Windows * 5,
-		})
+		activity := daySummary[entry.UserID]
+		row := arcaRankedMember{
+			ID: "member-" + strconv.Itoa(i+1), Label: label, Anonymous: anonymous, Rank: rank, EstimatedMinutes: entry.Windows * 5,
+			ActiveDays: activity.days, LongestStreak: activity.longestStreak, ActiveToday: activity.lastDay == today.Unix(),
+		}
+		if recorded, ok := usage[entry.UserID]; ok {
+			row.Requests, row.Tokens = &recorded.Requests, &recorded.Tokens
+		}
+		rows = append(rows, row)
 	}
-	common.ApiSuccess(c, gin.H{"members": rows, "suppressed": false, "timezone": "UTC"})
+	common.ApiSuccess(c, gin.H{"members": rows, "popular_models": popular, "activity_bands": bands, "suppressed": false, "usage_available": usageAvailable, "timezone": "UTC"})
 }

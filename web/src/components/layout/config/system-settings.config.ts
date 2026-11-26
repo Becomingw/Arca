@@ -20,7 +20,7 @@ import type { TFunction } from 'i18next'
 import {
   Box,
   Route,
-  CreditCard,
+  Gauge,
   Layout,
   Settings,
   Shield,
@@ -66,8 +66,8 @@ function getSystemSettingsNavGroups(
           items: getAuthSectionNavItems(t),
         },
         {
-          title: t('Billing & Payment'),
-          icon: CreditCard,
+          title: t('Quota Settings'),
+          icon: Gauge,
           badge: badges.modelPricing,
           items: getBillingSectionNavItems(t, {
             'model-pricing': badges.modelPricing,

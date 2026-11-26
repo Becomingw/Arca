@@ -23,6 +23,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -72,6 +73,7 @@ it('submits a structured policy by expected version and keeps its draft on a con
     </QueryClientProvider>
   )
 
+  await user.click(await screen.findByRole('tab', { name: 'Organizations' }))
   fireEvent.change(await screen.findByLabelText('Organization ID'), {
     target: { value: 'support' },
   })
@@ -93,9 +95,9 @@ it('submits a structured policy by expected version and keeps its draft on a con
   fireEvent.change(screen.getByLabelText('Models'), {
     target: { value: 'model-a' },
   })
-  await user.click(screen.getByRole('tab', { name: 'Budgets' }))
+  await user.click(screen.getByRole('tab', { name: 'Legacy allowances' }))
   await user.click(screen.getByRole('button', { name: 'Add default budget' }))
-  fireEvent.change(screen.getByLabelText('Weekly (USD)'), {
+  fireEvent.change(screen.getByLabelText('Weekly allowance'), {
     target: { value: '12.50' },
   })
   await user.click(screen.getByRole('button', { name: 'Save policy' }))
@@ -125,7 +127,97 @@ it('submits a structured policy by expected version and keeps its draft on a con
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Your draft is still here'
   )
-  expect(screen.getByLabelText('Weekly (USD)')).toHaveValue(12.5)
+  expect(screen.getByLabelText('Weekly allowance')).toHaveValue(12.5)
   expect(screen.getByRole('button', { name: 'Save policy' })).toBeDisabled()
+  queryClient.clear()
+})
+
+it('creates and duplicates a template, then assigns one plan per user or user group', async () => {
+  useAuthStore
+    .getState()
+    .auth.setUser({ id: 1, username: 'fixture-root', role: ROLE.SUPER_ADMIN })
+  vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    if (url === '/api/group/') {
+      return { data: { success: true, data: ['staff'] } }
+    }
+    if (url === '/api/channel/models_enabled') {
+      return { data: { success: true, data: ['model-a'] } }
+    }
+    if (url.startsWith('/api/user/search')) {
+      return {
+        data: {
+          success: true,
+          data: { items: [{ id: 13, username: 'alex' }] },
+        },
+      }
+    }
+    return { data: { success: true, data: initialPolicy } }
+  })
+  const put = vi
+    .spyOn(api, 'put')
+    .mockRejectedValueOnce({ response: { status: 409 } })
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const user = userEvent.setup()
+  render(
+    <QueryClientProvider client={queryClient}>
+      <Entitlements />
+    </QueryClientProvider>
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Use template' }))
+  expect(screen.getByLabelText('Daily allowance')).toHaveValue(10)
+  fireEvent.change(screen.getByLabelText('Plan name'), {
+    target: { value: 'Research' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Duplicate plan' }))
+  expect(screen.getByLabelText('Plan name')).toHaveValue('Research (copy)')
+  await user.click(screen.getByRole('tab', { name: 'Assignments' }))
+  const directCard = (
+    await screen.findByText('User subscriptions')
+  ).closest<HTMLElement>('[data-slot=card]')
+  const groupsCard = screen
+    .getByText('Group subscriptions')
+    .closest<HTMLElement>('[data-slot=card]')
+  if (!directCard || !groupsCard) throw new Error('Assignment cards missing')
+  const direct = within(directCard)
+  const groups = within(groupsCard)
+  const choose = async (field: HTMLElement, name: string) => {
+    await user.click(field)
+    await user.click(await screen.findByRole('option', { name }))
+  }
+  await choose(direct.getByRole('combobox', { name: 'User' }), 'alex · #13')
+  await choose(
+    direct.getByRole('combobox', { name: 'Assigned subscription' }),
+    'Research'
+  )
+  await choose(
+    direct.getByRole('combobox', { name: 'Assigned subscription' }),
+    'Research (copy)'
+  )
+  await choose(groups.getByRole('combobox', { name: 'User group' }), 'staff')
+  await choose(
+    groups.getByRole('combobox', { name: 'Assigned subscription' }),
+    'Research'
+  )
+  await user.click(screen.getByRole('button', { name: 'Save policy' }))
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith(
+      '/api/arca/admin/entitlements',
+      {
+        expected_version: 7,
+        policy: expect.objectContaining({
+          user_subscriptions: { '13': 'plan-2' },
+          group_subscriptions: { staff: 'plan-1' },
+          plans: expect.objectContaining({
+            'plan-1': expect.objectContaining({ name: 'Research' }),
+            'plan-2': expect.objectContaining({ name: 'Research (copy)' }),
+          }),
+        }),
+      },
+      expect.anything()
+    )
+  )
   queryClient.clear()
 })

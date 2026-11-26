@@ -36,13 +36,23 @@ type ArcaEntitlementPolicyRow struct {
 }
 
 type ArcaEntitlementPolicy struct {
-	Timezone        string                      `json:"timezone"`
-	Default         *ArcaAllocation             `json:"default,omitempty"`
-	Organizations   map[string]ArcaOrganization `json:"organizations"`
-	Groups          map[string]ArcaAllocation   `json:"groups"`
-	Users           map[string]ArcaAllocation   `json:"users"`
-	UserModelAccess map[string]ArcaModelAccess  `json:"user_model_access"`
-	ModelFamilies   map[string]ArcaModelFamily  `json:"model_families"`
+	Timezone           string                          `json:"timezone"`
+	Default            *ArcaAllocation                 `json:"default,omitempty"`
+	Organizations      map[string]ArcaOrganization     `json:"organizations"`
+	Groups             map[string]ArcaAllocation       `json:"groups"`
+	Users              map[string]ArcaAllocation       `json:"users"`
+	UserModelAccess    map[string]ArcaModelAccess      `json:"user_model_access"`
+	ModelFamilies      map[string]ArcaModelFamily      `json:"model_families"`
+	Plans              map[string]ArcaSubscriptionPlan `json:"plans,omitempty"`
+	UserSubscriptions  map[string]string               `json:"user_subscriptions,omitempty"`
+	GroupSubscriptions map[string]string               `json:"group_subscriptions,omitempty"`
+}
+
+type ArcaSubscriptionPlan struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Allocation  ArcaAllocation  `json:"allocation"`
+	ModelAccess ArcaModelAccess `json:"model_access"`
 }
 
 type ArcaOrganization struct {
@@ -65,6 +75,7 @@ type ArcaAllocation struct {
 	InternalFunding bool                   `json:"internal_funding"`
 	Unlimited       bool                   `json:"unlimited"`
 	FiveHour        *float64               `json:"five_hour_budget_usd,omitempty"`
+	Daily           *float64               `json:"daily_budget_usd,omitempty"`
 	Weekly          *float64               `json:"weekly_budget_usd,omitempty"`
 	Monthly         *float64               `json:"monthly_budget_usd,omitempty"`
 	Models          map[string]ArcaSubPool `json:"models"`
@@ -79,10 +90,12 @@ type ArcaSubPool struct {
 }
 
 type ArcaEffectiveEntitlement struct {
-	GroupIDs    []string        `json:"group_ids"`
-	Source      string          `json:"source"`
-	Allocation  ArcaAllocation  `json:"allocation"`
-	ModelAccess ArcaModelAccess `json:"model_access"`
+	GroupIDs         []string        `json:"group_ids"`
+	Source           string          `json:"source"`
+	Allocation       ArcaAllocation  `json:"allocation"`
+	ModelAccess      ArcaModelAccess `json:"model_access"`
+	SubscriptionID   string          `json:"subscription_id,omitempty"`
+	SubscriptionName string          `json:"subscription_name,omitempty"`
 }
 
 type ArcaBudgetWindow struct {
@@ -227,7 +240,78 @@ func (p *ArcaEntitlementPolicy) Validate() error {
 			return err
 		}
 	}
+	return p.validateSubscriptions()
+}
+
+func (p ArcaEntitlementPolicy) validateSubscriptions() error {
+	if len(p.Plans) > 128 || len(p.UserSubscriptions)+len(p.GroupSubscriptions) > 10_000 {
+		return errors.New("too many subscription definitions or assignments")
+	}
+	for id, plan := range p.Plans {
+		if !validArcaPolicyID(id) || !validArcaPolicyName(plan.Name) || len(plan.Description) > 512 || strings.ContainsRune(plan.Description, 0) {
+			return errors.New("invalid subscription definition")
+		}
+		if err := plan.ModelAccess.validate(); err != nil {
+			return err
+		}
+		if plan.ModelAccess.Mode == "" || plan.ModelAccess.Mode == "inherit" {
+			return errors.New("subscription requires an explicit model access rule")
+		}
+		if err := plan.Allocation.validate(p.ModelFamilies); err != nil {
+			return err
+		}
+		if !plan.coversAllowedModels(p.ModelFamilies) {
+			return errors.New("subscription requires an overall limit, explicit unlimited use, or limits covering every allowed model")
+		}
+		plan.Allocation.InternalFunding = true
+		p.Plans[id] = plan
+	}
+	for user, plan := range p.UserSubscriptions {
+		if _, exists := p.Plans[plan]; !validArcaUserID(user) || !exists {
+			return errors.New("invalid user subscription assignment")
+		}
+	}
+	for group, plan := range p.GroupSubscriptions {
+		if _, exists := p.Plans[plan]; !validArcaPolicyName(group) || group == "*" || !exists {
+			return errors.New("invalid group subscription assignment")
+		}
+	}
 	return nil
+}
+
+func (p ArcaSubscriptionPlan) coversAllowedModels(families map[string]ArcaModelFamily) bool {
+	a := p.Allocation
+	if p.ModelAccess.Mode == "deny_all" || a.Unlimited ||
+		(ArcaSubPool{FiveHour: a.FiveHour, Daily: a.Daily, Weekly: a.Weekly, Monthly: a.Monthly}).hasLimit() ||
+		a.Models["*"].hasLimit() {
+		return true
+	}
+	if p.ModelAccess.Mode != "specific" {
+		return false
+	}
+	covered := make(map[string]bool)
+	for name, pool := range a.Models {
+		if pool.hasLimit() {
+			covered[name] = true
+		}
+	}
+	for id, pool := range a.Families {
+		if pool.hasLimit() {
+			for _, model := range families[id].Models {
+				covered[model] = true
+			}
+		}
+	}
+	for _, model := range p.ModelAccess.Models {
+		if !covered[model] {
+			return false
+		}
+	}
+	return true
+}
+
+func (p ArcaSubPool) hasLimit() bool {
+	return p.FiveHour != nil || p.Daily != nil || p.Weekly != nil || p.Monthly != nil
 }
 
 func validArcaPolicyID(id string) bool {
@@ -280,9 +364,9 @@ func (a ArcaModelAccess) validate() error {
 }
 
 func (a ArcaAllocation) validate(families map[string]ArcaModelFamily) error {
-	totals := []*float64{a.FiveHour, a.Weekly, a.Monthly}
+	totals := []*float64{a.FiveHour, a.Daily, a.Weekly, a.Monthly}
 	if a.Unlimited {
-		if a.FiveHour != nil || a.Weekly != nil || a.Monthly != nil || len(a.Models)+len(a.Families) > 0 {
+		if a.FiveHour != nil || a.Daily != nil || a.Weekly != nil || a.Monthly != nil || len(a.Models)+len(a.Families) > 0 {
 			return errors.New("unlimited allocation cannot contain limits")
 		}
 		return nil
@@ -313,9 +397,39 @@ func validArcaBudgetLimits(limits ...*float64) bool {
 }
 
 func (p ArcaEntitlementPolicy) Effective(userID int) ArcaEffectiveEntitlement {
+	return p.EffectiveForGroup(userID, "")
+}
+
+func (p ArcaEntitlementPolicy) EffectiveForUser(userID int) (ArcaEffectiveEntitlement, error) {
+	if p.UserSubscriptions[strconv.Itoa(userID)] != "" || len(p.GroupSubscriptions) == 0 {
+		return p.Effective(userID), nil
+	}
+	group, err := GetUserGroup(userID, false)
+	if err != nil {
+		return ArcaEffectiveEntitlement{}, err
+	}
+	return p.EffectiveForGroup(userID, group), nil
+}
+
+func (p ArcaEntitlementPolicy) EffectiveForGroup(userID int, nativeGroup string) ArcaEffectiveEntitlement {
 	user := strconv.Itoa(userID)
 	result := ArcaEffectiveEntitlement{
 		GroupIDs: []string{}, Source: "none", ModelAccess: ArcaModelAccess{Mode: "unrestricted"},
+	}
+	planID, source := p.UserSubscriptions[user], "user_subscription"
+	if planID == "" {
+		planID, source = p.GroupSubscriptions[nativeGroup], "group_subscription"
+	}
+	if planID != "" {
+		plan, exists := p.Plans[planID]
+		if !exists {
+			result.ModelAccess.Mode = "deny_all"
+			return result
+		}
+		result.SubscriptionID, result.SubscriptionName = planID, plan.Name
+		result.Source, result.Allocation, result.ModelAccess = source, plan.Allocation, plan.ModelAccess
+		result.Allocation.InternalFunding = true
+		return result
 	}
 	groupModels := map[string]bool{}
 	groupACLRestricted, groupACLUnrestricted := false, false
@@ -370,7 +484,7 @@ func mergeArcaAllocations(a, b ArcaAllocation) ArcaAllocation {
 	}
 	return ArcaAllocation{
 		InternalFunding: a.InternalFunding || b.InternalFunding,
-		FiveHour:        arcaMaxLimit(a.FiveHour, b.FiveHour), Weekly: arcaMaxLimit(a.Weekly, b.Weekly),
+		FiveHour:        arcaMaxLimit(a.FiveHour, b.FiveHour), Daily: arcaMaxLimit(a.Daily, b.Daily), Weekly: arcaMaxLimit(a.Weekly, b.Weekly),
 		Monthly: arcaMaxLimit(a.Monthly, b.Monthly), Models: mergeArcaSubPools(a.Models, b.Models),
 		Families: mergeArcaSubPools(a.Families, b.Families),
 	}
@@ -428,7 +542,8 @@ func ArcaRuntimeModelAccess(ctx context.Context, userID int) (ArcaModelAccess, e
 	if err != nil {
 		return ArcaModelAccess{}, err
 	}
-	return policy.Effective(userID).ModelAccess, nil
+	effective, err := policy.EffectiveForUser(userID)
+	return effective.ModelAccess, err
 }
 
 func (p ArcaEntitlementPolicy) Windows(e ArcaEffectiveEntitlement, alias string, now time.Time) ([]ArcaBudgetWindow, error) {
@@ -470,7 +585,7 @@ func (p ArcaEntitlementPolicy) Windows(e ArcaEffectiveEntitlement, alias string,
 		}
 	}
 	a := e.Allocation
-	add("total", "", nil, ArcaSubPool{FiveHour: a.FiveHour, Weekly: a.Weekly, Monthly: a.Monthly})
+	add("total", "", nil, ArcaSubPool{FiveHour: a.FiveHour, Daily: a.Daily, Weekly: a.Weekly, Monthly: a.Monthly})
 	for _, name := range slices.Sorted(maps.Keys(a.Models)) {
 		switch {
 		case name == "*":

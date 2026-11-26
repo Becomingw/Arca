@@ -60,18 +60,6 @@ var accessTokenExemptRoutes = []string{
 	"POST /api/user/auth/refresh",
 	"POST /api/user/auth/logout",
 
-	// Payment callbacks.
-	"POST /api/stripe/webhook",
-	"POST /api/creem/webhook",
-	"POST /api/waffo/webhook",
-	"POST /api/waffo-pancake/webhook/:env",
-	"GET /api/user/epay/notify",
-	"POST /api/user/epay/notify",
-	"GET /api/subscription/epay/notify",
-	"POST /api/subscription/epay/notify",
-	"GET /api/subscription/epay/return",
-	"POST /api/subscription/epay/return",
-
 	// Relay API key authentication.
 	"GET /api/opencode/config",
 	"GET /api/usage/token/",
@@ -92,13 +80,27 @@ func newAccessTokenScopeTestEngine(t *testing.T) *gin.Engine {
 	// A permission route that is also in the static table panics here.
 	require.NotPanics(t, func() {
 		SetApiRouter(engine)
-		SetDashboardRouter(engine)
 		SetRelayRouter(engine)
 		SetTaskPluginProtocolRouter(engine)
 		SetVideoRouter(engine)
 		SetTaskRouter(engine)
 	})
 	return engine
+}
+
+func TestRetiredUserFundingRoutesStayUnregistered(t *testing.T) {
+	engine := newAccessTokenScopeTestEngine(t)
+	for _, route := range engine.Routes() {
+		path := route.Path
+		assert.False(t, strings.HasPrefix(path, "/api/subscription/"), path)
+		assert.False(t, strings.Contains(path, "/dashboard/billing/"), path)
+		assert.NotContains(t, []string{
+			"/api/user/topup", "/api/user/topup/info", "/api/user/topup/self", "/api/user/topup/complete",
+			"/api/user/pay", "/api/user/epay/notify", "/api/user/checkin", "/api/user/aff", "/api/user/aff_transfer",
+			"/api/stripe/webhook", "/api/creem/webhook", "/api/waffo/webhook", "/api/waffo-pancake/webhook/:env",
+			"/api/option/payment_compliance",
+		}, path)
+	}
 }
 
 func TestAccessTokenRouteRulesCoverEveryDashboardRoute(t *testing.T) {

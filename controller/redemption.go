@@ -3,12 +3,12 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,17 +61,13 @@ func GetRedemption(c *gin.Context) {
 }
 
 func AddRedemption(c *gin.Context) {
-	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiErrorT(c, "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
-		return
-	}
-
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	redemption.Name = strings.TrimSpace(redemption.Name)
 	if utf8.RuneCountInString(redemption.Name) == 0 || utf8.RuneCountInString(redemption.Name) > 20 {
 		common.ApiErrorT(c, "Redemption code name length must be between 1-20")
 		return
@@ -88,37 +84,37 @@ func AddRedemption(c *gin.Context) {
 		common.ApiErrorT(c, "Redemption quota must be positive")
 		return
 	}
-	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
-		common.ApiError(c, err)
+	if redemption.Quota > common.MaxQuota {
+		common.ApiErrorT(c, "Redemption usage exceeds the maximum")
 		return
 	}
 	if err := validateExpiredTime(redemption.ExpiredTime); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	var keys []string
-	for i := 0; i < redemption.Count; i++ {
+	spec, err := model.ResolveArcaUsageGrantSpec(c.Request.Context(), redemption.Grant, nil, time.Now())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	keys := make([]string, 0, redemption.Count)
+	codes := make([]model.Redemption, 0, redemption.Count)
+	for range redemption.Count {
 		key := common.GetUUID()
-		cleanRedemption := model.Redemption{
-			UserId:      c.GetInt("id"),
-			Name:        redemption.Name,
-			Key:         key,
-			CreatedTime: common.GetTimestamp(),
-			Quota:       redemption.Quota,
-			ExpiredTime: redemption.ExpiredTime,
-		}
-		err = cleanRedemption.Insert()
-		if err != nil {
-			common.SysError(common.LogText("failed to insert redemption: %s", err.Error()))
-			common.ApiErrorStatus(c, http.StatusOK, common.NewMessage("Failed to create redemption code, please try again later"), gin.H{"data": keys})
-			return
-		}
+		codes = append(codes, model.Redemption{
+			UserId: c.GetInt("id"), Name: redemption.Name, Key: key, CreatedTime: common.GetTimestamp(),
+			Quota: redemption.Quota, ExpiredTime: redemption.ExpiredTime, Grant: spec,
+		})
 		keys = append(keys, key)
+	}
+	if err := model.DB.WithContext(c.Request.Context()).CreateInBatches(&codes, 40).Error; err != nil {
+		common.ApiErrorT(c, "Failed to create redemption code, please try again later")
+		return
 	}
 	recordManageAudit(c, "redemption.create", map[string]any{
 		"name":  redemption.Name,
 		"count": redemption.Count,
-		"quota": logger.FormatQuota(redemption.Quota),
+		"quota": redemption.Quota,
 	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -160,23 +156,39 @@ func UpdateRedemption(c *gin.Context) {
 			common.ApiErrorT(c, "Redemption quota must be positive")
 			return
 		}
-		if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
-			common.ApiError(c, err)
+		if redemption.Quota > common.MaxQuota {
+			common.ApiErrorT(c, "Redemption usage exceeds the maximum")
 			return
 		}
 		if err := validateExpiredTime(redemption.ExpiredTime); err != nil {
 			common.ApiError(c, err)
 			return
 		}
-		// If you add more fields, please also update redemption.Update()
+		redemption.Name = strings.TrimSpace(redemption.Name)
+		if utf8.RuneCountInString(redemption.Name) == 0 || utf8.RuneCountInString(redemption.Name) > 20 {
+			common.ApiErrorT(c, "Redemption code name length must be between 1-20")
+			return
+		}
+		spec, err := model.ResolveArcaUsageGrantSpec(c.Request.Context(), redemption.Grant, cleanRedemption.Grant, time.Now())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		cleanRedemption.Grant = spec
 		cleanRedemption.Name = redemption.Name
 		cleanRedemption.Quota = redemption.Quota
 		cleanRedemption.ExpiredTime = redemption.ExpiredTime
 	}
 	if statusOnly != "" {
+		if redemption.Status != common.RedemptionCodeStatusEnabled && redemption.Status != common.RedemptionCodeStatusDisabled {
+			common.ApiErrorT(c, "Invalid parameters")
+			return
+		}
 		cleanRedemption.Status = redemption.Status
+		err = cleanRedemption.UpdateUnusedStatus()
+	} else {
+		err = cleanRedemption.UpdateUnusedGrant()
 	}
-	err = cleanRedemption.Update()
 	if err != nil {
 		common.ApiError(c, err)
 		return

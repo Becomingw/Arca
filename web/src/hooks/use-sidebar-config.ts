@@ -56,7 +56,6 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   },
   personal: {
     enabled: true,
-    topup: true,
     personal: true,
     security: true,
   },
@@ -67,7 +66,6 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     redemption: true,
     user: true,
     setting: true,
-    subscription: true,
     entitlements: true,
   },
 }
@@ -108,14 +106,13 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/dashboard/users': { section: 'console', module: 'detail' },
   '/workspace': { section: 'console', module: 'workspace' },
   '/feedback': { section: 'console', module: 'feedback' },
-  '/team-activity': { section: 'console', module: 'team_activity' },
+  '/rankings': { section: 'console', module: 'team_activity' },
   '/keys': { section: 'console', module: 'token' },
   '/usage-logs': { section: 'console', module: 'log' },
   '/usage-logs/common': { section: 'console', module: 'log' },
   '/usage-logs/audit': { section: 'console', module: 'audit' },
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
-  '/wallet': { section: 'personal', module: 'topup' },
   '/profile': { section: 'personal', module: 'personal' },
   '/security': { section: 'personal', module: 'security' },
   '/entitlements': { section: 'admin', module: 'entitlements' },
@@ -125,7 +122,6 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/models/deployments': { section: 'admin', module: 'models' },
   '/users': { section: 'admin', module: 'user' },
   '/redemption-codes': { section: 'admin', module: 'redemption' },
-  '/subscriptions': { section: 'admin', module: 'subscription' },
   '/system-settings': { section: 'admin', module: 'setting' },
   '/system-settings/site': { section: 'admin', module: 'setting' },
 }
@@ -325,7 +321,7 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
 /**
  * Check whether a single route is visible under the current sidebar_modules
  * config. Used by entries living outside the sidebar (e.g. the profile
- * dropdown's wallet link) so they honour the same "wallet display" toggle.
+ * dropdown's security link) so they honour the configured sidebar toggle.
  */
 export function useIsSidebarModuleVisible(url: string): boolean {
   const { status } = useStatus()

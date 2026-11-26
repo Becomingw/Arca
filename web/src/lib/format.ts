@@ -82,6 +82,17 @@ export function formatCurrencyUSD(value: number | null | undefined): string {
 // Quota Formatting (500,000 units = $1)
 // ============================================================================
 
+/** Format stored quota as Arca usage units. */
+export function formatQuotaUnits(
+  quota: number,
+  locales?: Intl.LocalesArgument
+): string {
+  const { config } = getCurrencyDisplay()
+  return Intl.NumberFormat(locales, { maximumFractionDigits: 6 }).format(
+    quota / config.quotaPerUnit
+  )
+}
+
 /**
  * Format quota into the configured display amount.
  * Quota is stored in units where `quotaPerUnit` equals 1 USD.

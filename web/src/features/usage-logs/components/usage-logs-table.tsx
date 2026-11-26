@@ -27,22 +27,16 @@ import {
   DataTableRow,
   useDataTable,
 } from '@/components/data-table'
-import {
-  getAdminPlans,
-  getSelfSubscriptionFull,
-} from '@/features/subscriptions/api'
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
 import {
   DEFAULT_LOGS_DATA,
   LOG_TYPE_ALL_VALUE,
   LOG_TYPE_ENUM,
 } from '../constants'
-import { shouldShowBillingSource } from '../lib/billing-source'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
@@ -97,31 +91,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   } = useLogsViewScope()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
-  const userId = useAuthStore((state) => state.auth.user?.id)
-  const { data: showBillingSource = false } = useQuery({
-    queryKey: ['usage-log-billing-source', isAdmin, userId],
-    enabled: logCategory === 'common' && userId != null,
-    queryFn: async () => {
-      if (isAdmin) {
-        const plansResult = await getAdminPlans()
-        return shouldShowBillingSource({
-          isAdmin,
-          plans: plansResult.success ? plansResult.data : undefined,
-          subscriptions: undefined,
-        })
-      }
-
-      const selfResult = await getSelfSubscriptionFull()
-      return shouldShowBillingSource({
-        isAdmin,
-        plans: undefined,
-        subscriptions: selfResult.success
-          ? selfResult.data?.subscriptions
-          : undefined,
-      })
-    },
-  })
-
   const {
     columnFilters,
     onColumnFiltersChange,
@@ -199,12 +168,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const logs = data?.items || []
-  const columns = useColumnsByCategory(
-    logCategory,
-    isAdmin,
-    isRoot,
-    showBillingSource
-  )
+  const columns = useColumnsByCategory(logCategory, isAdmin, isRoot)
   const isLoadingData = isLoading || (isFetching && !data)
 
   const { table } = useDataTable({

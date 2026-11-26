@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import {
+  formatBillingCurrencyFromUSD,
+  type CurrencyFormatOptions,
+} from '@/lib/currency'
 
 import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
@@ -25,6 +28,31 @@ import { getConfiguredGroupRatio, getDisplayGroupRatio } from './model-helpers'
 // ----------------------------------------------------------------------------
 // Price Calculation Utilities
 // ----------------------------------------------------------------------------
+
+const usageRateFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 9,
+})
+
+export function formatUsageRate(value: number): string {
+  return usageRateFormatter.format(value)
+}
+
+type PricePresentation = 'currency' | 'plain' | 'usage'
+
+function formatModelPrice(
+  value: number,
+  presentation: PricePresentation,
+  digitsSmall = 6
+): string {
+  if (presentation === 'usage') return formatUsageRate(value)
+  const options: CurrencyFormatOptions = {
+    showSymbol: presentation === 'currency',
+    digitsLarge: 4,
+    digitsSmall,
+    abbreviate: false,
+  }
+  return formatBillingCurrencyFromUSD(value, options)
+}
 
 /**
  * Strip trailing zeros from formatted price string while preserving currency symbols
@@ -149,7 +177,7 @@ export function formatPrice(
   priceRate = 1,
   usdExchangeRate = 1,
   selectedGroup?: string,
-  showCurrencySymbol = true
+  presentation: PricePresentation = 'currency'
 ): string {
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
@@ -160,18 +188,13 @@ export function formatPrice(
   let priceInUSD = calculateTokenPrice(model, type, displayGroupRatio)
   priceInUSD = applyRechargeRate(
     priceInUSD,
-    showWithRecharge,
+    showWithRecharge && presentation !== 'usage',
     priceRate,
     usdExchangeRate
   )
 
   const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit]
-  return formatBillingCurrencyFromUSD(price, {
-    showSymbol: showCurrencySymbol,
-    digitsLarge: 4,
-    digitsSmall: 6,
-    abbreviate: false,
-  })
+  return formatModelPrice(price, presentation)
 }
 
 /**
@@ -185,7 +208,8 @@ export function formatGroupPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  groupRatio: Record<string, number>
+  groupRatio: Record<string, number>,
+  presentation: PricePresentation = 'currency'
 ): string {
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
@@ -196,17 +220,13 @@ export function formatGroupPrice(
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
-    showWithRecharge,
+    showWithRecharge && presentation !== 'usage',
     priceRate,
     usdExchangeRate
   )
 
   const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit]
-  return formatBillingCurrencyFromUSD(price, {
-    digitsLarge: 4,
-    digitsSmall: 6,
-    abbreviate: false,
-  })
+  return formatModelPrice(price, presentation)
 }
 
 /**
@@ -218,7 +238,8 @@ export function formatFixedPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  groupRatio: Record<string, number>
+  groupRatio: Record<string, number>,
+  presentation: PricePresentation = 'currency'
 ): string {
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
@@ -229,16 +250,12 @@ export function formatFixedPrice(
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
-    showWithRecharge,
+    showWithRecharge && presentation !== 'usage',
     priceRate,
     usdExchangeRate
   )
 
-  return formatBillingCurrencyFromUSD(priceInUSD, {
-    digitsLarge: 4,
-    digitsSmall: 4,
-    abbreviate: false,
-  })
+  return formatModelPrice(priceInUSD, presentation, 4)
 }
 
 /**
@@ -250,7 +267,7 @@ export function formatRequestPrice(
   priceRate = 1,
   usdExchangeRate = 1,
   selectedGroup?: string,
-  showCurrencySymbol = true
+  presentation: PricePresentation = 'currency'
 ): string {
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
@@ -262,15 +279,10 @@ export function formatRequestPrice(
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
-    showWithRecharge,
+    showWithRecharge && presentation !== 'usage',
     priceRate,
     usdExchangeRate
   )
 
-  return formatBillingCurrencyFromUSD(priceInUSD, {
-    showSymbol: showCurrencySymbol,
-    digitsLarge: 4,
-    digitsSmall: 4,
-    abbreviate: false,
-  })
+  return formatModelPrice(priceInUSD, presentation, 4)
 }

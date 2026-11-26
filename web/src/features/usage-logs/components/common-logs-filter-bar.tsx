@@ -44,7 +44,11 @@ import { useMediaQuery } from '@/hooks'
 import { getUserGroups } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
-import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
+import {
+  LOG_TYPE_ALL_VALUE,
+  LOG_TYPE_ENUM,
+  LOG_TYPE_FILTERS,
+} from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
@@ -61,6 +65,7 @@ import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
 type LogTypeValue = (typeof LOG_TYPE_FILTERS)[number]['value']
+const retiredTopUpType = String(LOG_TYPE_ENUM.TOPUP)
 const logTypeValueSet = new Set<string>(
   LOG_TYPE_FILTERS.map((type) => type.value)
 )
@@ -176,9 +181,13 @@ export function CommonLogsFilterBar<TData>(
     return {
       sourceKey: buildSearchSourceKey(sourceValues),
       filters,
-      logType: getLogTypeValue(searchParams.type),
+      logType:
+        !isAdmin && searchParams.type?.some((type) => type === retiredTopUpType)
+          ? LOG_TYPE_ALL_VALUE
+          : getLogTypeValue(searchParams.type),
     }
   }, [
+    isAdmin,
     searchParams.startTime,
     searchParams.endTime,
     searchParams.channel,
@@ -285,12 +294,14 @@ export function CommonLogsFilterBar<TData>(
     : '[-webkit-text-security:disc]'
   const logTypeItems = useMemo(
     () =>
-      LOG_TYPE_FILTERS.map((type) => ({
+      LOG_TYPE_FILTERS.filter(
+        (type) => isAdmin || type.value !== retiredTopUpType
+      ).map((type) => ({
         value: type.value,
         label: t(type.label),
         deprecated: type.deprecated,
       })),
-    [t]
+    [isAdmin, t]
   )
   const selectedLogType = logTypeItems.find((type) => type.value === logType)
   const deprecatedTypeDescription = t(
@@ -407,7 +418,7 @@ export function CommonLogsFilterBar<TData>(
           className='max-w-[calc(100vw-2rem)] min-w-52'
         >
           <SelectGroup>
-            {LOG_TYPE_FILTERS.map((type) => (
+            {logTypeItems.map((type) => (
               <SelectItem
                 key={type.value}
                 value={type.value}
@@ -416,7 +427,7 @@ export function CommonLogsFilterBar<TData>(
                   type.deprecated ? deprecatedTypeDescription : undefined
                 }
               >
-                {t(type.label)}
+                {type.label}
                 {type.deprecated && (
                   <Badge
                     variant='secondary'

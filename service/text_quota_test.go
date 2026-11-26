@@ -1722,6 +1722,7 @@ func TestArcaOrganizationFundingUsesBudgetWithoutChargingWallet(t *testing.T) {
 	t.Cleanup(model.EnableArcaEntitlementRuntime())
 	require.NoError(t, db.AutoMigrate(
 		&model.User{}, &model.Token{}, &model.ArcaEntitlementPolicyRow{}, &model.ArcaBudgetAccount{}, &model.ArcaBudgetReservation{},
+		&model.ArcaUsageGrant{}, &model.ArcaBudgetGrantUse{}, &model.Redemption{},
 	))
 	user := model.User{Username: "arca-team-user", Status: common.UserStatusEnabled}
 	require.NoError(t, db.Create(&user).Error)
@@ -1787,4 +1788,26 @@ func TestArcaOrganizationFundingUsesBudgetWithoutChargingWallet(t *testing.T) {
 	require.Len(t, usage, 1)
 	require.EqualValues(t, 10, usage[0].UsedMicros)
 	require.Zero(t, usage[0].ReservedMicros)
+
+	_, err = model.SaveArcaEntitlementPolicy(ctx, 1, model.ArcaEntitlementPolicy{})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&user).UpdateColumn("quota", 123).Error)
+	missingPlanContext, missingPlan := newRequest("no-plan", "team-model")
+	require.Equal(t, types.ErrorCodeInsufficientUserQuota, PreConsumeBilling(missingPlanContext, 1, missingPlan).GetErrorCode())
+
+	code := model.Redemption{Key: "1d41869391034f38a07e404a6e171fd0", Name: "Temporary usage", Quota: 4, Grant: &model.ArcaUsageGrantSpec{Models: []string{"team-model"}}}
+	require.NoError(t, db.Create(&code).Error)
+	_, err = model.RedeemArcaUsageGrant(ctx, user.Id, code.Key, time.Now())
+	require.NoError(t, err)
+	wrongContext, wrong := newRequest("grant-wrong-model", "other-model")
+	require.Equal(t, types.ErrorCodeInsufficientUserQuota, PreConsumeBilling(wrongContext, 1, wrong).GetErrorCode())
+	grantContext, grantInfo := newRequest("grant-budget", "team-model")
+	require.Nil(t, PreConsumeBilling(grantContext, 2, grantInfo))
+	require.NoError(t, SettleBilling(grantContext, grantInfo, 3))
+	require.NoError(t, db.First(&user, user.Id).Error)
+	require.Equal(t, 123, user.Quota)
+	grants, err := model.ListArcaUsageGrants(ctx, user.Id, time.Now())
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.EqualValues(t, 2, grants[0].RemainingMicros)
 }

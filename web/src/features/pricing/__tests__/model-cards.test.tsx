@@ -106,6 +106,48 @@ describe('model cards', () => {
       '$0'
     )
   })
+  it('keeps raw usage rates for token and per-request models despite display currency', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'CNY',
+        usdExchangeRate: 7,
+      },
+    })
+    const ratioModel = pricingModel({
+      quota_type: 1,
+      model_price: 0.4,
+      group_ratio: { default: 1, premium: 2 },
+      enable_groups: ['default', 'premium'],
+    })
+    const { rerender } = render(
+      <ModelCard
+        model={ratioModel}
+        onClick={vi.fn()}
+        selectedGroup='premium'
+        usageUnits
+      />
+    )
+    const rates = screen.getByRole('group', { name: 'Model usage rates' })
+    expect(within(rates).getByText('Usage units')).toBeVisible()
+    expect(rates).toHaveTextContent('0.8 / request')
+    expect(rates).not.toHaveTextContent(/[$¥]/)
+
+    rerender(
+      <ModelCard
+        model={pricingModel({
+          billing_mode: 'tiered_expr',
+          billing_expr: 'tier("standard", p * 5 + c * 9)',
+        })}
+        onClick={vi.fn()}
+        tokenUnit='K'
+        usageUnits
+      />
+    )
+    expect(rates).toHaveTextContent('0.005 / 1K')
+    expect(rates).not.toHaveTextContent(/[$¥]/)
+  })
+
   it('shows fixed prices per request in both token display units', () => {
     const model = pricingModel({
       billing_mode: 'tiered_expr',

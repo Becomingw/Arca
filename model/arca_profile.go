@@ -111,17 +111,85 @@ func RecordArcaActivity(ctx context.Context, userID int, startedAt int64) error 
 	return err
 }
 
+const ArcaActivityMinimumMembers = 3
+
+const arcaActivityDay = "bucket_at - (bucket_at % 86400)"
+const arcaActivityBand = "(bucket_at % 86400) - (bucket_at % 21600)"
+
 type ArcaActivityMember struct {
 	UserID  int
 	Windows int64
 }
 
+type ArcaActivityDay struct {
+	UserID int
+	DayAt  int64
+}
+
+type ArcaActivityBand struct {
+	StartSecond int64 `json:"start_second"`
+	Windows     int64 `json:"windows"`
+}
+
+type ArcaMemberUsage struct {
+	UserID   int
+	Requests int64 `json:"requests"`
+	Tokens   int64 `json:"tokens"`
+}
+
+type ArcaModelUsage struct {
+	Model    string `json:"model"`
+	Requests int64  `json:"requests"`
+	Tokens   int64  `json:"tokens"`
+}
+
+func arcaActivityActiveUsers(db *gorm.DB) *gorm.DB {
+	return db.Model(&User{}).Select("id").Where("status = ?", common.UserStatusEnabled)
+}
+
 func ReadArcaActivity(ctx context.Context, start, end int64) ([]ArcaActivityMember, error) {
+	db := DB.WithContext(ctx)
 	var members []ArcaActivityMember
-	err := DB.WithContext(ctx).Model(&ArcaActivityWindow{}).Select("user_id, COUNT(*) AS windows").
-		Where("bucket_at >= ? AND bucket_at < ?", start, end).
+	err := db.Model(&ArcaActivityWindow{}).Select("user_id, COUNT(*) AS windows").
+		Where("bucket_at >= ? AND bucket_at < ? AND user_id IN (?)", start, end, arcaActivityActiveUsers(db)).
 		Group("user_id").Order("windows DESC, user_id ASC").Limit(20).Find(&members).Error
 	return members, err
+}
+
+func ReadArcaActivityDays(ctx context.Context, userIDs []int, start, end int64) ([]ArcaActivityDay, error) {
+	var days []ArcaActivityDay
+	err := DB.WithContext(ctx).Model(&ArcaActivityWindow{}).Select("user_id, "+arcaActivityDay+" AS day_at").
+		Where("bucket_at >= ? AND bucket_at < ? AND user_id IN ?", start, end, userIDs).
+		Group("user_id, " + arcaActivityDay).Order("user_id ASC, day_at ASC").Find(&days).Error
+	return days, err
+}
+
+func ReadArcaActivityBands(ctx context.Context, start, end int64) ([]ArcaActivityBand, error) {
+	db := DB.WithContext(ctx)
+	bands := make([]ArcaActivityBand, 0, 4)
+	err := db.Model(&ArcaActivityWindow{}).Select(arcaActivityBand+" AS start_second, COUNT(*) AS windows").
+		Where("bucket_at >= ? AND bucket_at < ? AND user_id IN (?)", start, end, arcaActivityActiveUsers(db)).
+		Group(arcaActivityBand).Having("COUNT(DISTINCT user_id) >= ?", ArcaActivityMinimumMembers).
+		Order("start_second ASC").Find(&bands).Error
+	return bands, err
+}
+
+func ReadArcaMemberUsage(ctx context.Context, userIDs []int, start, end int64) ([]ArcaMemberUsage, error) {
+	var usage []ArcaMemberUsage
+	err := DB.WithContext(ctx).Model(&QuotaData{}).Select("user_id, SUM(count) AS requests, COALESCE(SUM(token_used), 0) AS tokens").
+		Where("created_at >= ? AND created_at < ? AND user_id IN ? AND count > 0", start, end, userIDs).
+		Group("user_id").Find(&usage).Error
+	return usage, err
+}
+
+func ReadArcaPopularModels(ctx context.Context, start, end int64) ([]ArcaModelUsage, error) {
+	db := DB.WithContext(ctx)
+	models := make([]ArcaModelUsage, 0, 10)
+	err := db.Model(&QuotaData{}).Select("model_name AS model, SUM(count) AS requests, COALESCE(SUM(token_used), 0) AS tokens").
+		Where("created_at >= ? AND created_at < ? AND user_id IN (?) AND model_name <> '' AND count > 0", start, end, arcaActivityActiveUsers(db)).
+		Group("model_name").Having("COUNT(DISTINCT user_id) >= ?", ArcaActivityMinimumMembers).
+		Order("requests DESC, model_name ASC").Limit(10).Find(&models).Error
+	return models, err
 }
 
 func ReadArcaActivityNames(ctx context.Context, userIDs []int) (map[int]string, error) {

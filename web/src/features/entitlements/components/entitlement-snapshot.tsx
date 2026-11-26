@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrencyUSD } from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
 
 import type { EntitlementSnapshot as Snapshot } from '../api'
 
@@ -38,7 +38,11 @@ export function EntitlementSnapshot({
   value: Snapshot
   compact?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const usage = new Intl.NumberFormat(
+    toIntlLocale(i18n.resolvedLanguage || i18n.language),
+    { maximumFractionDigits: 6 }
+  )
   const scopes = {
     total: t('Total'),
     family: t('Model family'),
@@ -46,6 +50,9 @@ export function EntitlementSnapshot({
   }
   const periods: Record<string, string> = {
     rolling_5h: t('5 hours'),
+    day: t('Daily'),
+    week: t('Weekly'),
+    month: t('Monthly'),
     daily: t('Daily'),
     weekly: t('Weekly'),
     monthly: t('Monthly'),
@@ -57,9 +64,9 @@ export function EntitlementSnapshot({
     specific: t('Selected models'),
     deny_all: t('No models'),
   }
-  const windows = (value.windows ?? []).filter(
-    (entry) => !compact || entry.scope === 'total'
-  )
+  const allWindows = value.windows ?? []
+  const totals = allWindows.filter((entry) => entry.scope === 'total')
+  const windows = compact && totals.length > 0 ? totals : allWindows
   if (!value.enabled) {
     return (
       <p className='text-muted-foreground text-sm'>
@@ -67,19 +74,36 @@ export function EntitlementSnapshot({
       </p>
     )
   }
+  if (
+    value.source === 'none' &&
+    windows.length === 0 &&
+    !value.allocation.unlimited &&
+    value.model_access.mode === 'unrestricted'
+  ) {
+    return (
+      <p className='text-muted-foreground text-sm'>
+        {t('No subscription assigned.')}
+      </p>
+    )
+  }
 
   return (
     <div className='flex flex-col gap-3'>
       <div className='flex flex-wrap gap-2'>
+        {value.subscription_name && <Badge>{value.subscription_name}</Badge>}
         <Badge variant='outline'>{access[value.model_access.mode]}</Badge>
         {value.allocation.unlimited && (
           <Badge variant='outline'>{t('Unlimited')}</Badge>
         )}
-        {value.allocation.internal_funding && (
-          <Badge variant='outline'>{t('Organization funded')}</Badge>
-        )}
         <Badge variant='outline'>{value.timezone}</Badge>
       </div>
+      {value.subscription_name && (
+        <p className='text-muted-foreground text-sm'>
+          {value.source === 'user_subscription'
+            ? t('Assigned directly to this user')
+            : t('Inherited from the user group')}
+        </p>
+      )}
       {value.group_ids.length > 0 && (
         <p className='text-muted-foreground text-sm'>
           {t('Organizations')}: {value.group_ids.join(', ')}
@@ -101,7 +125,7 @@ export function EntitlementSnapshot({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('Budget')}</TableHead>
+                <TableHead>{t('Usage allowance')}</TableHead>
                 <TableHead>{t('Period')}</TableHead>
                 <TableHead className='text-right'>{t('Used')}</TableHead>
                 <TableHead className='text-right'>{t('Remaining')}</TableHead>
@@ -121,11 +145,11 @@ export function EntitlementSnapshot({
                     {periods[window.period] || window.period}
                   </TableCell>
                   <TableCell className='text-right tabular-nums'>
-                    {formatCurrencyUSD(window.used_micros / 1e6)} /{' '}
-                    {formatCurrencyUSD(window.limit_micros / 1e6)}
+                    {usage.format(window.used_micros / 1e6)} /{' '}
+                    {usage.format(window.limit_micros / 1e6)}
                   </TableCell>
                   <TableCell className='text-right tabular-nums'>
-                    {formatCurrencyUSD(window.remaining_micros / 1e6)}
+                    {usage.format(window.remaining_micros / 1e6)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -133,9 +157,11 @@ export function EntitlementSnapshot({
           </Table>
         </div>
       ) : (
-        <p className='text-muted-foreground text-sm'>
-          {t('No budget limits defined.')}
-        </p>
+        !value.allocation.unlimited && (
+          <p className='text-muted-foreground text-sm'>
+            {t('No budget limits defined.')}
+          </p>
+        )
       )}
     </div>
   )

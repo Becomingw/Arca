@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Combobox } from '@/components/ui/combobox'
 import {
   Field,
   FieldDescription,
@@ -83,24 +84,27 @@ export function PolicyListField({
   entries,
   onChange,
   numeric = false,
+  choices,
 }: {
   label: string
   entries: (string | number)[] | null | undefined
   onChange: (entries: string[]) => void
   numeric?: boolean
+  choices?: string[]
 }) {
   const { t } = useTranslation()
   const id = useId()
   const [text, setText] = useState(() => (entries ?? []).join('\n'))
   const separator = numeric ? /[\n,]/ : /\n/
-  const items = [
+  const parse = (input: string) => [
     ...new Set(
-      text
+      input
         .split(separator)
         .map((value) => value.trim())
         .filter(Boolean)
     ),
   ]
+  const items = parse(text)
   const invalid =
     numeric &&
     items.some(
@@ -125,16 +129,25 @@ export function PolicyListField({
         onChange={(event) => {
           const next = event.currentTarget.value
           setText(next)
-          onChange([
-            ...new Set(
-              next
-                .split(separator)
-                .map((item) => item.trim())
-                .filter(Boolean)
-            ),
-          ])
+          onChange(parse(next))
         }}
       />
+      {choices && choices.length > 0 && (
+        <Combobox
+          aria-label={t('Add from model catalog')}
+          placeholder={t('Add from model catalog')}
+          options={choices
+            .filter((model) => !items.includes(model))
+            .map((model) => ({ value: model, label: model }))}
+          value={null}
+          onValueChange={(model: string | null) => {
+            if (!model || items.includes(model)) return
+            const next = [...items, model]
+            setText(next.join('\n'))
+            onChange(next)
+          }}
+        />
+      )}
       <FieldDescription>{description}</FieldDescription>
     </Field>
   )
@@ -143,9 +156,13 @@ export function PolicyListField({
 export function ModelAccessFields({
   value,
   onChange,
+  managed = false,
+  aliases,
 }: {
   value: ModelAccess
   onChange: (value: ModelAccess) => void
+  managed?: boolean
+  aliases?: string[]
 }) {
   const { t } = useTranslation()
   const id = useId()
@@ -155,11 +172,10 @@ export function ModelAccessFields({
     specific: t('Selected models'),
     deny_all: t('No models'),
   }
-  const mode = value.mode || 'inherit'
-  const entries = Object.entries(labels).map(([key, label]) => ({
-    value: key,
-    label,
-  }))
+  const mode = value.mode || (managed ? 'unrestricted' : 'inherit')
+  const entries = Object.entries(labels)
+    .filter(([key]) => !managed || key !== 'inherit')
+    .map(([key, label]) => ({ value: key, label }))
 
   return (
     <FieldGroup>
@@ -194,6 +210,7 @@ export function ModelAccessFields({
           label={t('Allowed models')}
           entries={value.models}
           onChange={(models) => onChange({ ...value, models })}
+          choices={aliases}
         />
       )}
     </FieldGroup>
@@ -209,6 +226,8 @@ export function PolicyMapEditor<T>({
   children,
   validKey = (key) => policyIdPattern.test(key),
   mayRemove = () => true,
+  options,
+  allowCustomKey = false,
 }: {
   label: string
   idLabel: string
@@ -218,6 +237,8 @@ export function PolicyMapEditor<T>({
   children: (value: T, update: (value: T) => void, key: string) => ReactNode
   validKey?: (key: string) => boolean
   mayRemove?: (key: string) => boolean
+  options?: string[]
+  allowCustomKey?: boolean
 }) {
   const { t } = useTranslation()
   const [idInput, setIdInput] = useState('')
@@ -235,12 +256,25 @@ export function PolicyMapEditor<T>({
           data-invalid={Boolean(key && !canAdd) || undefined}
         >
           <FieldLabel htmlFor={id}>{idLabel}</FieldLabel>
-          <Input
-            id={id}
-            value={idInput}
-            onChange={(event) => setIdInput(event.currentTarget.value)}
-            aria-invalid={Boolean(key && !canAdd)}
-          />
+          {options ? (
+            <Combobox
+              id={id}
+              options={options
+                .filter((option) => !Object.hasOwn(values ?? {}, option))
+                .map((option) => ({ value: option, label: option }))}
+              allowCustomValue={allowCustomKey}
+              value={idInput}
+              onValueChange={(next) => setIdInput(next ?? '')}
+              aria-invalid={Boolean(key && !canAdd)}
+            />
+          ) : (
+            <Input
+              id={id}
+              value={idInput}
+              onChange={(event) => setIdInput(event.currentTarget.value)}
+              aria-invalid={Boolean(key && !canAdd)}
+            />
+          )}
         </Field>
         <Button
           type='button'
@@ -287,20 +321,18 @@ type BudgetKey = keyof SubPool
 function BudgetPeriods({
   value,
   onChange,
-  daily = false,
 }: {
   value: SubPool
   onChange: (next: SubPool) => void
-  daily?: boolean
 }) {
   const { t } = useTranslation()
   const id = useId()
   const labels: [BudgetKey, string][] = [
-    ['five_hour_budget_usd', t('5 hours (USD)')],
-    ['weekly_budget_usd', t('Weekly (USD)')],
-    ['monthly_budget_usd', t('Monthly (USD)')],
+    ['five_hour_budget_usd', t('5-hour allowance')],
+    ['daily_budget_usd', t('Daily allowance')],
+    ['weekly_budget_usd', t('Weekly allowance')],
+    ['monthly_budget_usd', t('Monthly allowance')],
   ]
-  if (daily) labels.splice(1, 0, ['daily_budget_usd', t('Daily (USD)')])
 
   return (
     <div className='grid grid-cols-2 gap-3 md:grid-cols-4'>
@@ -311,6 +343,7 @@ function BudgetPeriods({
             id={id + key}
             type='number'
             min='0'
+            max='100000000'
             step='any'
             value={value[key] ?? ''}
             onChange={(event) => {
@@ -331,33 +364,24 @@ export function AllocationFields({
   value,
   onChange,
   families,
+  aliases,
 }: {
   value: Allocation
   onChange: (value: Allocation) => void
   families: string[]
+  aliases?: string[]
 }) {
   const { t } = useTranslation()
   const id = useId()
   const hasLimits =
     value.five_hour_budget_usd !== undefined ||
+    value.daily_budget_usd !== undefined ||
     value.weekly_budget_usd !== undefined ||
     value.monthly_budget_usd !== undefined ||
     Object.keys(value.models ?? {}).length > 0 ||
     Object.keys(value.families ?? {}).length > 0
   return (
     <FieldGroup>
-      <Field orientation='horizontal'>
-        <FieldLabel htmlFor={`${id}-funding`}>
-          {t('Organization funded')}
-        </FieldLabel>
-        <Switch
-          id={`${id}-funding`}
-          checked={value.internal_funding}
-          onCheckedChange={(checked) =>
-            onChange({ ...value, internal_funding: checked })
-          }
-        />
-      </Field>
       <Field orientation='horizontal'>
         <FieldLabel htmlFor={`${id}-unlimited`}>{t('Unlimited')}</FieldLabel>
         <Switch
@@ -395,11 +419,11 @@ export function AllocationFields({
             values={value.models}
             create={() => ({})}
             onChange={(models) => onChange({ ...value, models })}
-            validKey={(key) => key.length <= 255}
+            validKey={(key) => key.length <= 128}
+            options={aliases}
+            allowCustomKey
           >
-            {(pool, update) => (
-              <BudgetPeriods value={pool} onChange={update} daily />
-            )}
+            {(pool, update) => <BudgetPeriods value={pool} onChange={update} />}
           </PolicyMapEditor>
           <PolicyMapEditor
             label={t('Add model family budget')}
@@ -408,16 +432,10 @@ export function AllocationFields({
             create={() => ({})}
             onChange={(next) => onChange({ ...value, families: next })}
             validKey={(key) => families.includes(key)}
+            options={families}
           >
-            {(pool, update) => (
-              <BudgetPeriods value={pool} onChange={update} daily />
-            )}
+            {(pool, update) => <BudgetPeriods value={pool} onChange={update} />}
           </PolicyMapEditor>
-          {families.length > 0 && (
-            <p className='text-muted-foreground text-sm'>
-              {t('Model family IDs')}: {families.join(', ')}
-            </p>
-          )}
         </>
       )}
     </FieldGroup>

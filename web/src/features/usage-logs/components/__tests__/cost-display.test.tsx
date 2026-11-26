@@ -71,7 +71,6 @@ describe('log cost display', () => {
           billing_source: 'subscription',
           subscription_consumed: consumed,
         },
-        showBillingSource: true,
       })
 
       expect(screen.getByText(expected)).toBeVisible()
@@ -81,24 +80,10 @@ describe('log cost display', () => {
     }
   )
 
-  test('shows wallet cost and source icon without using subscription metadata', () => {
-    renderCost({
-      quota: 5000,
-      other: { billing_source: 'wallet', subscription_consumed: 12500 },
-      showBillingSource: true,
-    })
-
-    expect(screen.getByText('$0.01')).toBeVisible()
-    expect(screen.getByRole('img', { name: 'Wallet' })).toBeVisible()
-    expect(screen.queryByText('Wallet')).not.toBeInTheDocument()
-    expect(screen.queryByText('Subscription')).not.toBeInTheDocument()
-  })
-
-  test('hides the wallet icon when subscriptions are unavailable', () => {
+  test('keeps usage cost visible for a historical wallet entry', () => {
     renderCost({
       quota: 5000,
       other: { billing_source: 'wallet' },
-      showBillingSource: false,
     })
 
     expect(screen.getByText('$0.01')).toBeVisible()
@@ -106,16 +91,17 @@ describe('log cost display', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 
-  test('keeps the subscription icon on a subscription-billed log when billing sources are hidden', () => {
+  test('labels historical subscription usage', () => {
     renderCost({
       quota: 5000,
       other: { billing_source: 'subscription', subscription_consumed: 12500 },
-      showBillingSource: false,
     })
 
     expect(screen.getByText('$0.025')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Subscription' })).toBeVisible()
-    expect(screen.queryByRole('img', { name: 'Wallet' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Wallet' })
+    ).not.toBeInTheDocument()
   })
 
   test('keeps legacy cost visible without inventing a funding source', () => {
@@ -131,7 +117,6 @@ describe('log cost display', () => {
     const rendered = renderCost({
       quota: 2147483647,
       other: { billing_source: 'subscription' },
-      showBillingSource: true,
     })
 
     const amount = screen.getByText('$4,294.9673')
@@ -147,16 +132,12 @@ describe('log cost display', () => {
     expect(screen.getByRole('img', { name: 'Subscription' })).toBeVisible()
   })
 
-  test.each([
-    { source: 'subscription', label: 'Subscription' },
-    { source: 'wallet', label: 'Wallet' },
-  ])(
+  test.each([{ source: 'subscription', label: 'Subscription' }])(
     'vertically centers the $source icon within its container',
     ({ source, label }) => {
       renderCost({
         quota: 5000,
         other: { billing_source: source },
-        showBillingSource: true,
       })
 
       // Mobile cards give inline-flex descendants a minimum height, so the
@@ -168,17 +149,13 @@ describe('log cost display', () => {
     }
   )
 
-  test.each([
-    { source: 'subscription', label: 'Subscription' },
-    { source: 'wallet', label: 'Wallet' },
-  ])(
+  test.each([{ source: 'subscription', label: 'Subscription' }])(
     'reveals the $source label on hover and keyboard focus',
     async ({ source, label }) => {
       const user = userEvent.setup()
       renderCost({
         quota: 5000,
         other: { billing_source: source },
-        showBillingSource: true,
       })
 
       const marker = screen.getByRole('img', { name: label })
@@ -221,7 +198,6 @@ describe('log cost display', () => {
         web_search_call_count: 1,
         web_search_price: 10,
       },
-      showBillingSource: true,
     })
 
     expect(screen.getByText('$0.01')).toBeVisible()

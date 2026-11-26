@@ -35,13 +35,9 @@ export function usePricingData(enabled = true) {
   })
 
   // Ensure rates never reach zero to prevent division errors
-  const priceRate = useMemo(
-    () => Math.max((status?.price as number) ?? 1, 0.001),
-    [status?.price]
-  )
   const usdExchangeRate = useMemo(
-    () => Math.max((status?.usd_exchange_rate as number) ?? priceRate, 0.001),
-    [status?.usd_exchange_rate, priceRate]
+    () => Math.max((status?.usd_exchange_rate as number) ?? 1, 0.001),
+    [status?.usd_exchange_rate]
   )
 
   const models = useMemo(() => {
@@ -74,7 +70,7 @@ export function usePricingData(enabled = true) {
     isLoading,
     error,
     refetch,
-    priceRate,
+    priceRate: 1,
     usdExchangeRate,
   }
 }

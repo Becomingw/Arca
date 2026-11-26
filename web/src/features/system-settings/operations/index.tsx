@@ -30,8 +30,6 @@ const defaultOperationsSettings: OperationsSettings = {
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
-  QuotaRemindEnabled: true,
-  QuotaRemindThreshold: '',
   EmailProvider: 'smtp',
   ResendApiKey: '',
   ResendKeyConfigured: false,

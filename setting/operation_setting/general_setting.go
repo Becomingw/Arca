@@ -10,6 +10,8 @@ const (
 	QuotaDisplayTypeCustom = "CUSTOM"
 )
 
+var USDExchangeRate = 7.3
+
 type GeneralSetting struct {
 	DocsLink            string `json:"docs_link"`
 	PingIntervalEnabled bool   `json:"ping_interval_enabled"`

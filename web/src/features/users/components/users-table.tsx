@@ -52,7 +52,6 @@ const route = getRouteApi('/_authenticated/users/')
 const USER_SORTABLE_COLUMNS = new Set<UserSortBy>([
   'id',
   'username',
-  'quota',
   'group',
   'created_at',
   'last_login_at',

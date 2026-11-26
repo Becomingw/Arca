@@ -41,11 +41,17 @@ export type SubPool = {
   weekly_budget_usd?: number
   monthly_budget_usd?: number
 }
-export type Allocation = Omit<SubPool, 'daily_budget_usd'> & {
+export type Allocation = SubPool & {
   internal_funding: boolean
   unlimited: boolean
   models: Record<string, SubPool> | null
   families: Record<string, SubPool> | null
+}
+export type SubscriptionPlan = {
+  name: string
+  description?: string
+  allocation: Allocation
+  model_access: ModelAccess
 }
 export type EntitlementPolicy = {
   timezone: string
@@ -55,6 +61,9 @@ export type EntitlementPolicy = {
   users: Record<string, Allocation> | null
   user_model_access: Record<string, ModelAccess> | null
   model_families: Record<string, ModelFamily> | null
+  plans?: Record<string, SubscriptionPlan> | null
+  user_subscriptions?: Record<string, string> | null
+  group_subscriptions?: Record<string, string> | null
 }
 export type BudgetWindow = {
   scope: 'total' | 'family' | 'model'
@@ -74,6 +83,8 @@ export type EntitlementSnapshot = {
   timezone: string
   group_ids: string[]
   source: string
+  subscription_id?: string
+  subscription_name?: string
   allocation: Allocation
   model_access: ModelAccess
   model_families: Record<string, ModelFamily> | null

@@ -65,6 +65,7 @@ export function PricingTable(props: PricingTableProps) {
     priceRate,
     usdExchangeRate,
     showRechargePrice,
+    usageUnits: true,
     selectedGroup,
   })
 

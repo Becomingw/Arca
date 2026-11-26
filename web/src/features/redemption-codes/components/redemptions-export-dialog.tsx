@@ -52,7 +52,7 @@ export function RedemptionsExportDialog(props: RedemptionsExportDialogProps) {
     const headers: string[] = []
     if (includeName) headers.push(t('Name'))
     headers.push(t('Code'))
-    if (includeQuota) headers.push(t('Quota'))
+    if (includeQuota) headers.push(t('Usage units'))
 
     const rows = props.data.keys.map((key) => {
       const row: string[] = []
@@ -158,7 +158,7 @@ export function RedemptionsExportDialog(props: RedemptionsExportDialogProps) {
                 checked={includeQuota}
                 onCheckedChange={setIncludeQuota}
               />
-              <Label htmlFor={`${id}-quota`}>{t('Include quota')}</Label>
+              <Label htmlFor={`${id}-quota`}>{t('Include usage units')}</Label>
             </div>
           </div>
         </div>

@@ -476,7 +476,7 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 		result.TokenApplied = true
 	}
 
-	if sendEmail && relayInfo.BillingSource != BillingSourceOrganization && (quota+preConsumedQuota) != 0 {
+	if sendEmail && !model.ArcaEntitlementRuntimeEnabled() && relayInfo.BillingSource != BillingSourceOrganization && (quota+preConsumedQuota) != 0 {
 		checkAndSendQuotaNotify(relayInfo, quota, preConsumedQuota)
 	}
 

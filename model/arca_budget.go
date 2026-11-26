@@ -31,16 +31,20 @@ type ArcaBudgetAccount struct {
 }
 
 type ArcaBudgetReservation struct {
-	UserID        int     `gorm:"primaryKey;autoIncrement:false;index:idx_arca_budget_user_time,priority:1;index:idx_arca_budget_reconcile,priority:1"`
-	RequestID     string  `gorm:"primaryKey;size:128"`
-	Model         string  `gorm:"size:255;not null"`
-	ModelIdentity string  `gorm:"size:64;not null"`
-	AdmittedAt    int64   `gorm:"not null;index:idx_arca_budget_user_time,priority:2"`
-	ExpiresAt     int64   `gorm:"not null"`
-	NextCheckAt   int64   `gorm:"not null;default:0;index:idx_arca_budget_reconcile,priority:3"`
-	Status        string  `gorm:"size:16;not null;index:idx_arca_budget_reconcile,priority:2"`
-	CostMicros    int64   `gorm:"not null"`
-	QuotaPerUSD   float64 `gorm:"not null"`
+	UserID        int                `gorm:"primaryKey;autoIncrement:false;index:idx_arca_budget_user_time,priority:1;index:idx_arca_budget_reconcile,priority:1"`
+	RequestID     string             `gorm:"primaryKey;size:128"`
+	Model         string             `gorm:"size:255;not null"`
+	ModelIdentity string             `gorm:"size:64;not null"`
+	AdmittedAt    int64              `gorm:"not null;index:idx_arca_budget_user_time,priority:2"`
+	ExpiresAt     int64              `gorm:"not null"`
+	NextCheckAt   int64              `gorm:"not null;default:0;index:idx_arca_budget_reconcile,priority:3"`
+	Status        string             `gorm:"size:16;not null;index:idx_arca_budget_reconcile,priority:2"`
+	CostMicros    int64              `gorm:"not null"`
+	PublicAlias   string             `gorm:"size:255;not null;default:''"`
+	GrantMicros   int64              `gorm:"not null;default:0"`
+	BaseLimited   bool               `gorm:"not null;default:false"`
+	BaseWindows   []ArcaBudgetWindow `gorm:"serializer:json;type:text"`
+	QuotaPerUSD   float64            `gorm:"not null"`
 }
 
 type ArcaBudgetUsage struct {
@@ -74,26 +78,44 @@ func ReserveArcaBudget(ctx context.Context, userID int, requestID, alias string,
 	if DB != nil && LOG_DB != nil && userID > 0 {
 		reconcilePendingArcaBudget(ctx, userID, now)
 	}
-	return reserveArcaBudget(ctx, userID, requestID, alias, quota, windows, now, false)
+	return reserveArcaBudget(ctx, userID, requestID, alias, quota, windows, now, false, nil)
 }
 
 func ResizeArcaBudget(ctx context.Context, userID int, requestID, alias string, quota int, windows []ArcaBudgetWindow, now time.Time) error {
-	return reserveArcaBudget(ctx, userID, requestID, alias, quota, windows, now, true)
+	return reserveArcaBudget(ctx, userID, requestID, alias, quota, windows, now, true, nil)
 }
 
-func reserveArcaBudget(ctx context.Context, userID int, requestID, alias string, quota int, windows []ArcaBudgetWindow, now time.Time, resize bool) error {
+// ArcaManagedAuthorization defines the base entitlement for this model. When
+// there are no matching windows, a finite or unassigned plan has zero base
+// capacity. Grants can pay the difference without widening model permissions.
+type ArcaManagedAuthorization struct {
+	PublicAlias string
+	Unbounded   bool
+}
+
+func ReserveArcaManagedBudget(ctx context.Context, userID int, requestID, alias string, quota int, windows []ArcaBudgetWindow, now time.Time, resize bool, managed ArcaManagedAuthorization) error {
+	if !resize && DB != nil && LOG_DB != nil && userID > 0 {
+		reconcilePendingArcaBudget(ctx, userID, now)
+	}
+	return reserveArcaBudget(ctx, userID, requestID, alias, quota, windows, now, resize, &managed)
+}
+
+func lockArcaBudgetAccount(tx *gorm.DB, userID int) error {
+	account := ArcaBudgetAccount{UserID: userID}
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&account).Error; err != nil {
+		return err
+	}
+	// Use a write lock on every supported database, including SQLite.
+	return tx.Model(&account).UpdateColumn("revision", gorm.Expr("revision + 1")).Error
+}
+
+func reserveArcaBudget(ctx context.Context, userID int, requestID, alias string, quota int, windows []ArcaBudgetWindow, now time.Time, resize bool, managed *ArcaManagedAuthorization) error {
 	if DB == nil || userID <= 0 || requestID == "" || len(requestID) > 128 || alias == "" || len(alias) > 255 {
 		return errors.New("invalid Arca budget request identity")
 	}
 	unix := now.Unix()
 	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		account := ArcaBudgetAccount{UserID: userID}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&account).Error; err != nil {
-			return err
-		}
-		// Take the same write lock before reading the ledger on all dialects,
-		// including SQLite which does not implement SELECT FOR UPDATE.
-		if err := tx.Model(&account).UpdateColumn("revision", gorm.Expr("revision + 1")).Error; err != nil {
+		if err := lockArcaBudgetAccount(tx, userID); err != nil {
 			return err
 		}
 
@@ -117,24 +139,63 @@ func reserveArcaBudget(ctx context.Context, userID int, requestID, alias string,
 			return err
 		}
 		cost = max(cost, reservation.CostMicros)
-		for _, window := range windows {
-			used, err := queryArcaBudgetUsage(tx, userID, requestID, window, unix)
+		if managed != nil {
+			if !exists {
+				reservation.PublicAlias = managed.PublicAlias
+				reservation.BaseLimited = !managed.Unbounded || len(windows) > 0
+				reservation.BaseWindows = windows
+			}
+			windows = reservation.BaseWindows
+		}
+		baseCost, err := arcaAvailableBaseCost(tx, reservation, windows, cost, unix)
+		if err != nil {
+			return err
+		}
+		shortfall := cost - baseCost
+		var uses []ArcaBudgetGrantUse
+		if managed != nil {
+			uses, err = allocateArcaGrantShortfall(tx, reservation, shortfall, managed.PublicAlias, false)
 			if err != nil {
 				return err
 			}
-			// Subtract in this order so already-exceeded budgets and unexpectedly
-			// large totals cannot attempt to overflow by adding another charge.
-			if used.UsedMicros > window.LimitMicros || used.ReservedMicros > window.LimitMicros-used.UsedMicros ||
-				cost > window.LimitMicros-used.UsedMicros-used.ReservedMicros {
-				return ErrArcaBudgetExceeded
+		} else if shortfall != 0 {
+			return ErrArcaBudgetExceeded
+		}
+		previousGrant := reservation.GrantMicros
+		reservation.CostMicros, reservation.GrantMicros = cost, shortfall
+		if !exists {
+			if err := tx.Create(&reservation).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(&reservation).Updates(map[string]any{"cost_micros": cost, "grant_micros": shortfall}).Error; err != nil {
+				return err
+			}
+			if previousGrant != 0 {
+				if err := tx.Where("user_id = ? AND request_id = ?", userID, requestID).Delete(&ArcaBudgetGrantUse{}).Error; err != nil {
+					return err
+				}
 			}
 		}
-		reservation.CostMicros = cost
-		if exists {
-			return tx.Model(&reservation).UpdateColumn("cost_micros", cost).Error
+		if len(uses) > 0 {
+			return tx.Create(&uses).Error
 		}
-		return tx.Create(&reservation).Error
+		return nil
 	})
+}
+
+func arcaAvailableBaseCost(db *gorm.DB, reservation ArcaBudgetReservation, windows []ArcaBudgetWindow, cost, now int64) (int64, error) {
+	if len(windows) == 0 && reservation.BaseLimited {
+		return 0, nil
+	}
+	for _, window := range windows {
+		usage, err := queryArcaBudgetUsage(db, reservation.UserID, reservation.RequestID, window, now)
+		if err != nil {
+			return 0, err
+		}
+		cost = min(cost, usage.RemainingMicros)
+	}
+	return cost, nil
 }
 
 func FinishArcaBudget(ctx context.Context, userID int, requestID string, actualQuota *int) error {
@@ -151,12 +212,17 @@ func updateArcaBudgetSettlement(ctx context.Context, userID int, requestID strin
 	if DB == nil {
 		return gorm.ErrInvalidDB
 	}
-	return updateArcaBudgetSettlementInDB(DB.WithContext(ctx), userID, requestID, actualQuota, eligible, false)
+	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return updateArcaBudgetSettlementInDB(tx, userID, requestID, actualQuota, eligible, false)
+	})
 }
 
 func updateArcaBudgetSettlementInDB(db *gorm.DB, userID int, requestID string, actualQuota *int, eligible []string, requireReservation bool) error {
 	if userID <= 0 || requestID == "" {
 		return errors.New("invalid Arca budget settlement identity")
+	}
+	if err := lockArcaBudgetAccount(db, userID); err != nil {
+		return err
 	}
 	query := func() *gorm.DB {
 		return db.Model(&ArcaBudgetReservation{}).Where(
@@ -164,7 +230,7 @@ func updateArcaBudgetSettlementInDB(db *gorm.DB, userID int, requestID string, a
 		)
 	}
 	if actualQuota == nil {
-		result := query().Updates(map[string]any{"status": arcaBudgetReleased, "cost_micros": 0})
+		result := query().Updates(map[string]any{"status": arcaBudgetReleased, "cost_micros": 0, "grant_micros": 0})
 		if result.Error == nil && requireReservation && result.RowsAffected != 1 {
 			return ErrArcaEntitlementConflict
 		}
@@ -188,7 +254,54 @@ func updateArcaBudgetSettlementInDB(db *gorm.DB, userID int, requestID string, a
 	if err != nil {
 		return err
 	}
-	return query().Updates(map[string]any{"status": arcaBudgetSettled, "cost_micros": cost}).Error
+	// Preserve the plan capacity already reserved for this request. If an
+	// actual charge grows, count other reservations in the original windows
+	// before using grants that were eligible at admission.
+	baseCost := min(cost, reservation.CostMicros-reservation.GrantMicros)
+	if cost > reservation.CostMicros && reservation.BaseLimited {
+		availableBase, err := arcaAvailableBaseCost(db, reservation, reservation.BaseWindows, cost, max(reservation.AdmittedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		baseCost = max(baseCost, availableBase)
+	}
+	targetGrant := cost - baseCost
+	grantCost := min(reservation.GrantMicros, targetGrant)
+	if targetGrant > reservation.GrantMicros && reservation.BaseLimited && reservation.PublicAlias != "" {
+		uses, err := allocateArcaGrantShortfall(db, reservation, targetGrant, reservation.PublicAlias, true)
+		if err != nil {
+			return err
+		}
+		grantCost = 0
+		for _, use := range uses {
+			grantCost += use.Micros
+		}
+		if err := db.Where("user_id = ? AND request_id = ?", userID, requestID).Delete(&ArcaBudgetGrantUse{}).Error; err != nil {
+			return err
+		}
+		if len(uses) > 0 {
+			if err := db.Create(&uses).Error; err != nil {
+				return err
+			}
+		}
+	} else if grantCost < reservation.GrantMicros {
+		var uses []ArcaBudgetGrantUse
+		if err := db.Where("user_id = ? AND request_id = ?", userID, requestID).Order("position ASC").Find(&uses).Error; err != nil {
+			return err
+		}
+		remaining := grantCost
+		for _, use := range uses {
+			allocated := min(remaining, use.Micros)
+			remaining -= allocated
+			if err := db.Model(&use).UpdateColumn("micros", allocated).Error; err != nil {
+				return err
+			}
+		}
+		if remaining != 0 {
+			return ErrArcaEntitlementConflict
+		}
+	}
+	return query().Updates(map[string]any{"status": arcaBudgetSettled, "cost_micros": cost, "grant_micros": grantCost}).Error
 }
 
 func ReadArcaBudgetUsage(ctx context.Context, userID int, windows []ArcaBudgetWindow, now time.Time) ([]ArcaBudgetUsage, error) {
@@ -232,8 +345,8 @@ func queryArcaBudgetUsage(db *gorm.DB, userID int, exclude string, window ArcaBu
 		Reserved int64
 	}
 	err := q.Select(
-		"COALESCE(SUM(CASE WHEN status = ? THEN cost_micros ELSE 0 END), 0) AS used, "+
-			"COALESCE(SUM(CASE WHEN status = ? THEN cost_micros ELSE 0 END), 0) AS reserved",
+		"COALESCE(SUM(CASE WHEN status = ? THEN cost_micros - grant_micros ELSE 0 END), 0) AS used, "+
+			"COALESCE(SUM(CASE WHEN status = ? THEN cost_micros - grant_micros ELSE 0 END), 0) AS reserved",
 		arcaBudgetSettled, arcaBudgetPending,
 	).Scan(&sums).Error
 	result.UsedMicros, result.ReservedMicros = sums.Used, sums.Reserved

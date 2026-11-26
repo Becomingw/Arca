@@ -24,14 +24,21 @@ The normal Docker and release builds produce the same frontend. Use isolated dat
 | In-app mentions | Discussions tab in the shared notification center |
 | External mentions | Configured administrator notification channels and a persistent delivery queue |
 | Avatars, token heatmap and activity privacy | `/profile` |
-| Team activity | `/team-activity` |
-| Organizations, model families and budget policy | `/entitlements` for the root role, with a personal summary in the workspace and profile |
+| Team activity, working patterns and common models | Signed-in Team tab at `/rankings` |
+| Managed subscriptions, model families and budget policy | `/entitlements` for the root role, with a personal summary in the workspace and profile |
+| Temporary usage grants | Administrator codes at `/redemption-codes` and member redemption at `/profile` |
 | OpenCode and CC Switch client setup | Native API key actions at `/keys` |
 | Linux and macOS setup | The API key screen and `GET /api/opencode/setup` |
 | OpenCode Go quota monitoring | Built-in `opencode-go` provider plugin and per-credential balance display |
 | Arca MCP | Native `/security` configuration and scoped PAT authentication at `POST /mcp` |
 
-The former `/arca/` bookmarks resolve to the matching native pages, including feedback topics. Existing application data, configuration and API routes are reused when upgrading the prior fusion branch.
+The former `/arca/` bookmarks resolve to the matching native pages, including feedback topics. Earlier team activity bookmarks also open the signed-in team ranking. Existing usage history and application records remain available when upgrading the prior fusion branch.
+
+## Managed access
+
+A user-specific plan takes precedence over the plan for the user's native group. One plan supplies limits and model access for a request. Existing Arca policies remain the fallback when neither assignment is present. Positive-cost requests without applicable plan allowance require compatible supplemental usage. Paid subscriptions, customer balance operations, checkout and payment webhooks are retired. Existing accounting tables remain available for upgrades and historical settlements.
+
+An unused code grants one account a finite amount of supplemental usage. An unrestricted grant can fund any model that account and key can already use. A scoped grant can be limited to exact aliases or to a snapshot of one model family. Code redemption deadline, optional usage dates, and usable lifetime after activation are separate controls. The gateway reserves plan capacity before a grant and prefers grants that expire earlier. Redemption, reservation, and settlement serialize on the user's budget account.
 
 For a deployed MCP endpoint, set `ARCA_MCP_ALLOWED_HOSTS` to the gateway hostnames. The default allows loopback hosts. Browser clients also require an explicitly allowed origin. Mint PAT scopes using the New API account interface. MCP feedback writes require a preview and single-use confirmation. The tool list advertises the actions permitted for the token's current account.
 
@@ -39,9 +46,9 @@ External mentions follow the administrator's configured New API SMTP or push pre
 
 ## Current release boundaries
 
-The budget ledger uses New API's configured gateway pricing. An organization can fund usage without a member's wallet. Realtime and legacy Midjourney requests subject to organization funding or finite budgets are rejected before dispatch. Provider invoice reconciliation uses a separate cost basis and needs a source of actual provider cost.
+The budget ledger uses New API's configured gateway pricing. An organization can fund usage without a member's wallet. Realtime and legacy Midjourney are unavailable through managed entitlements because they use the retired wallet settlement path. Provider invoice reconciliation uses a separate cost basis and needs a source of actual provider cost.
 
-Ordinary requests with an explicit final usage record can reconcile a missed budget settlement. For a task with a known terminal charge or refund, the organization ledger and terminal status transition commit together. When the provider gives insufficient evidence for a different charge, the ledger retains the submitted estimate. The native wallet and token adjustments remain under the New API settlement flow.
+Ordinary requests with an explicit final usage record can reconcile a missed budget settlement. For a task with a known terminal charge or refund, the organization ledger and terminal status transition commit together. When the provider gives insufficient evidence for a different charge, the ledger retains the submitted estimate. API key limits remain under the native New API settlement flow.
 
 Quota polling can proactively disable an exhausted OpenCode Go credential and allow healthy ones to serve subsequent requests. An upstream model-specific refusal does not globally disable a credential. Immediate same-request fallback across multiple keys after a just-observed refusal depends on native retry behavior.
 

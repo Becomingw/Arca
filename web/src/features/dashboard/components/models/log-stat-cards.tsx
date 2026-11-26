@@ -33,7 +33,11 @@ import type {
   DashboardFilters,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
+import {
+  formatCompactNumber,
+  formatNumber,
+  formatQuotaUnits,
+} from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -127,8 +131,8 @@ export function LogStatCards(props: LogStatCardsProps) {
     const formatted =
       config.key === 'quota'
         ? {
-            displayValue: formatQuota(rawValue),
-            fullValue: formatQuota(rawValue),
+            displayValue: formatQuotaUnits(rawValue),
+            fullValue: formatQuotaUnits(rawValue),
           }
         : formatStatNumber(rawValue, locale)
 

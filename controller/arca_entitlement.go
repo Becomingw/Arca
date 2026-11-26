@@ -69,12 +69,12 @@ func GetArcaMyEntitlements(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	snapshot, err := arcaEntitlementPreview(c.Request.Context(), policy, userID, nil, time.Now())
+	userGroup, err := model.GetUserGroup(userID, false)
 	if err != nil {
 		common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Database error, please contact the administrator"))
 		return
 	}
-	userGroup, err := model.GetUserGroup(userID, false)
+	snapshot, err := arcaEntitlementPreview(c.Request.Context(), policy, userID, userGroup, nil, time.Now())
 	if err != nil {
 		common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Database error, please contact the administrator"))
 		return
@@ -164,7 +164,8 @@ func getArcaEntitlementPreview(ctx context.Context, userID, apiKeyID int, propos
 	}
 
 	unavailable := common.NewMessage("Database error, please contact the administrator")
-	if _, err := model.GetUserById(userID, false); err != nil {
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, http.StatusNotFound, common.NewMessage("Invalid parameters")
 		}
@@ -186,17 +187,17 @@ func getArcaEntitlementPreview(ctx context.Context, userID, apiKeyID int, propos
 		return nil, http.StatusServiceUnavailable, unavailable
 	}
 	now := time.Now()
-	saved, err := arcaEntitlementPreview(ctx, policy, userID, token, now)
+	saved, err := arcaEntitlementPreview(ctx, policy, userID, user.Group, token, now)
 	if err != nil {
 		return nil, http.StatusServiceUnavailable, unavailable
 	}
 	var draft *arcaEntitlementSnapshot
 	if proposed != nil {
-		effective := proposed.Effective(userID)
+		effective := proposed.EffectiveForGroup(userID, user.Group)
 		if _, err := proposed.Windows(effective, "", now); err != nil {
 			return nil, http.StatusBadRequest, common.NewMessage("Invalid input {{error}}", map[string]any{"error": err.Error()})
 		}
-		snapshot, err := arcaEntitlementPreview(ctx, *proposed, userID, token, now)
+		snapshot, err := arcaEntitlementPreview(ctx, *proposed, userID, user.Group, token, now)
 		if err != nil {
 			return nil, http.StatusServiceUnavailable, unavailable
 		}
@@ -205,8 +206,8 @@ func getArcaEntitlementPreview(ctx context.Context, userID, apiKeyID int, propos
 	return gin.H{"version": version, "saved": saved, "proposed": draft}, http.StatusOK, nil
 }
 
-func arcaEntitlementPreview(ctx context.Context, policy model.ArcaEntitlementPolicy, userID int, token *model.Token, now time.Time) (arcaEntitlementSnapshot, error) {
-	effective := policy.Effective(userID)
+func arcaEntitlementPreview(ctx context.Context, policy model.ArcaEntitlementPolicy, userID int, userGroup string, token *model.Token, now time.Time) (arcaEntitlementSnapshot, error) {
+	effective := policy.EffectiveForGroup(userID, userGroup)
 	result := arcaEntitlementSnapshot{
 		UserID: userID, Enabled: model.ArcaEntitlementRuntimeEnabled(), CostBasis: "gateway_priced_usd", Timezone: policy.Timezone,
 		ArcaEffectiveEntitlement: effective, ModelFamilies: policy.ModelFamilies,

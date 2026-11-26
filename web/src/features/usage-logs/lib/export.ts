@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
+import {
+  formatLogQuota,
+  formatQuotaUnits,
+  formatTimestampToDate,
+} from '@/lib/format'
 
 import type { UsageLog } from '../data/schema'
 import { logTokenName, parseLogOther, renderLogContent } from './format'
@@ -46,7 +50,7 @@ export function getLogCsvHeader(isAdmin: boolean, t: Translate): string[] {
     t('Output Tokens'),
     t('Cache Read'),
     t('Cache Write'),
-    t('Cost'),
+    t(isAdmin ? 'Cost' : 'Usage units'),
     t('Duration'),
     t('IP'),
     t('Request ID'),
@@ -86,7 +90,7 @@ export function getLogCsvRow(
     usage ? String(log.completion_tokens ?? 0) : '',
     usage ? String(other?.cache_tokens ?? 0) : '',
     usage ? String(cacheWrite) : '',
-    usage ? formatLogQuota(log.quota ?? 0) : '',
+    usage ? (isAdmin ? formatLogQuota : formatQuotaUnits)(log.quota ?? 0) : '',
     isTimingLogType(log.type) ? `${log.use_time ?? 0}s` : '',
     log.ip ?? '',
     log.request_id ?? '',

@@ -26,7 +26,6 @@ import { GroupRatioVisualEditor } from '../group-ratio-visual-editor'
 function PricingFixture() {
   const [settings, setSettings] = useState<Record<string, string>>({
     GroupRatio: '{"default":1}',
-    TopupGroupRatio: '{}',
     UserUsableGroups: '{}',
   })
   return (
@@ -36,7 +35,6 @@ function PricingFixture() {
         onSectionChange={() => {}}
         defaultUseAutoGroupField={null}
         groupRatio={settings.GroupRatio}
-        topupGroupRatio={settings.TopupGroupRatio}
         userUsableGroups={settings.UserUsableGroups}
         groupGroupRatio='{}'
         autoGroups='[]'
@@ -51,10 +49,7 @@ function PricingFixture() {
   )
 }
 
-test.each([
-  ['GroupRatio', 0],
-  ['TopupGroupRatio', 1],
-] as const)(
+test.each([['GroupRatio', 0]] as const)(
   '%s preserves typed decimals and accepts them as valid numeric ratios',
   async (key, index) => {
     const user = userEvent.setup()

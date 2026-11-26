@@ -70,7 +70,12 @@ import { pluginUsageSchema } from '@/features/pricing/lib/plugin-pricing'
 import { PolicyDecisionRecord } from '@/features/system-settings/request-policies/decision-record'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
+import {
+  formatLogQuota,
+  formatQuotaUnits,
+  formatTokens,
+  formatUseTime,
+} from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -175,6 +180,23 @@ function quotaSaturationKindLabel(
   if (kind === 'overflow') return t('Overflow')
   if (kind === 'underflow') return t('Underflow')
   return t('Invalid (NaN)')
+}
+
+function UsageFactRows({ facts }: { facts: LogOtherData['usage_facts'] }) {
+  const { t } = useTranslation()
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return null
+
+  const entries = Object.entries(facts)
+  if (entries.length === 0) return null
+
+  return (
+    <>
+      <Label className='text-xs font-semibold'>{t('Usage parameters')}</Label>
+      {entries.map(([key, value]) => (
+        <DetailRow key={key} label={key} value={String(value)} mono />
+      ))}
+    </>
+  )
 }
 
 function BillingBreakdown(props: {
@@ -364,33 +386,12 @@ function BillingBreakdown(props: {
     })
   }
 
-  const usageFacts =
-    other.usage_facts != null &&
-    typeof other.usage_facts === 'object' &&
-    !Array.isArray(other.usage_facts)
-      ? Object.entries(other.usage_facts)
-      : []
-
   return (
     <DetailSection label={t('Billing Details')}>
       {rows.map((row) => (
         <DetailRow key={row.label} label={row.label} value={row.value} mono />
       ))}
-      {usageFacts.length > 0 && (
-        <>
-          <Label className='text-xs font-semibold'>
-            {t('Usage parameters')}
-          </Label>
-          {usageFacts.map(([key, value]) => (
-            <DetailRow
-              key={`usage-fact-${key}`}
-              label={key}
-              value={String(value)}
-              mono
-            />
-          ))}
-        </>
-      )}
+      <UsageFactRows facts={other.usage_facts} />
       <DetailRow
         label={t('Total Cost')}
         value={formatLogQuota(log.quota)}
@@ -553,7 +554,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
     !isViolation &&
     other?.billing_mode === 'tiered_expr' &&
     !!other?.expr_b64
-  const pricingData = usePricingData(props.open && isTieredBilling)
+  const pricingData = usePricingData(
+    props.open && props.isAdmin && isTieredBilling
+  )
   const billingUsageSchema = pluginUsageSchema(
     pricingData.models.find(
       (model) => model.model_name === props.log.model_name
@@ -705,7 +708,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
       contentClassName={cn(
         'min-w-0 overflow-hidden',
         'max-sm:max-h-(--dialog-available-height) max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
-        isTieredBilling ? 'sm:max-w-4xl lg:max-w-5xl' : 'sm:max-w-lg'
+        props.isAdmin && isTieredBilling
+          ? 'sm:max-w-4xl lg:max-w-5xl'
+          : 'sm:max-w-lg'
       )}
       headerClassName='max-sm:gap-1'
       titleClassName='flex items-center gap-2 text-base'
@@ -949,8 +954,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
             <DetailRow
-              label={t('Fee Amount')}
-              value={formatLogQuota(other.fee_quota ?? props.log.quota)}
+              label={t(props.isAdmin ? 'Fee Amount' : 'Usage units')}
+              value={(props.isAdmin ? formatLogQuota : formatQuotaUnits)(
+                other.fee_quota ?? props.log.quota
+              )}
               mono
             />
           </DetailSection>
@@ -1251,7 +1258,26 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Billing breakdown (consume type) */}
-        {isConsume && other && !isViolation && (
+        {!props.isAdmin && isConsume && !isViolation && (
+          <>
+            {other?.matched_tier && (
+              <DetailRow label={t('Matched Tier')} value={other.matched_tier} />
+            )}
+            {other?.image_count !== undefined && (
+              <DetailRow
+                label={t('Billable image count')}
+                value={other.image_count}
+              />
+            )}
+            <UsageFactRows facts={other?.usage_facts} />
+            <DetailRow
+              label={t('Usage units')}
+              value={formatQuotaUnits(props.log.quota)}
+              mono
+            />
+          </>
+        )}
+        {props.isAdmin && isConsume && other && !isViolation && (
           <BillingBreakdown
             log={props.log}
             other={other}
@@ -1260,7 +1286,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}
-        {isTieredBilling && other?.expr_b64 && (
+        {props.isAdmin && isTieredBilling && other?.expr_b64 && (
           <DetailSection label={t('Dynamic Pricing')}>
             {other.image_count !== undefined && (
               <DetailRow
@@ -1347,7 +1373,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Subscription billing details */}
-        {isSubscription && other && (
+        {props.isAdmin && isSubscription && other && (
           <DetailSection label={t('Subscription Billing')}>
             {other.subscription_plan_id && (
               <DetailRow

@@ -22,6 +22,27 @@ import { z } from 'zod'
 // Redemption Schema & Types
 // ============================================================================
 
+export const usageGrantScope = z.object({
+  models: z.array(z.string()).optional(),
+  family: z.string().optional(),
+  starts_at: z.number().optional(),
+  ends_at: z.number().optional(),
+  valid_for_seconds: z.number().optional(),
+})
+export type UsageGrantScope = z.infer<typeof usageGrantScope>
+
+export type UsageGrant = {
+  id: number
+  name: string
+  granted_at: number
+  starts_at: number
+  ends_at: number
+  amount_micros: number
+  remaining_micros: number
+  models?: string[]
+  family?: string
+}
+
 export const redemptionSchema = z.object({
   id: z.number(),
   user_id: z.number(),
@@ -33,6 +54,7 @@ export const redemptionSchema = z.object({
   redeemed_time: z.number(),
   expired_time: z.number(), // 0 for never expires
   used_user_id: z.number(),
+  grant: usageGrantScope.optional(),
 })
 
 export type Redemption = z.infer<typeof redemptionSchema>
@@ -75,6 +97,7 @@ export interface RedemptionFormData {
   name: string
   quota: number
   expired_time: number
+  grant?: UsageGrantScope
   count?: number // Only for create
   status?: number // Only for status update
 }

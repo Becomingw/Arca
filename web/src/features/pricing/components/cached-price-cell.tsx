@@ -45,12 +45,15 @@ export function CachedPriceCell(props: {
     usdExchangeRate = 1,
     showRechargePrice = false,
     selectedGroup,
+    usageUnits,
   } = props.options
 
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
 
   const model = useMemo(() => withBasePricing(props.model), [props.model])
-  const currency = useSystemConfigStore((state) => state.config.currency)
+  const currency = useSystemConfigStore((state) =>
+    usageUnits ? undefined : state.config.currency
+  )
   const billingTime = useBillingTime(model.billing_expr)
   const dynamicSummary = useMemo(
     () =>
@@ -60,6 +63,7 @@ export function CachedPriceCell(props: {
         showRechargePrice,
         priceRate,
         usdExchangeRate,
+        usageUnits,
         groupRatioMultiplier: getDynamicDisplayGroupRatio(model, selectedGroup),
       }),
     // Currency is read indirectly by the price formatter.
@@ -73,6 +77,7 @@ export function CachedPriceCell(props: {
       selectedGroup,
       billingTime,
       currency,
+      usageUnits,
     ]
   )
 
@@ -108,12 +113,14 @@ export function CachedPriceCell(props: {
               </span>
             )}
             <span className='font-mono text-sm tabular-nums'>
-              {stripTrailingZeros(entry.formatted)}
+              {usageUnits
+                ? entry.formatted
+                : stripTrailingZeros(entry.formatted)}
             </span>
           </div>
         ))}
         <div className='text-muted-foreground/50 text-[10px]'>
-          / {tokenUnitLabel}
+          {usageUnits ? t('Usage units') : null} / {tokenUnitLabel}
         </div>
       </div>
     )
@@ -129,23 +136,24 @@ export function CachedPriceCell(props: {
     return <span className='text-muted-foreground/30 text-xs'>—</span>
   }
 
-  const cachedPrice = stripTrailingZeros(
-    formatPrice(
-      model,
-      'cache',
-      tokenUnit,
-      showRechargePrice,
-      priceRate,
-      usdExchangeRate,
-      selectedGroup
-    )
+  const cachedPrice = formatPrice(
+    model,
+    'cache',
+    tokenUnit,
+    showRechargePrice,
+    priceRate,
+    usdExchangeRate,
+    selectedGroup,
+    usageUnits ? 'usage' : 'currency'
   )
 
   return (
     <div className='max-w-full min-w-0'>
-      <span className='font-mono text-sm tabular-nums'>{cachedPrice}</span>
+      <span className='font-mono text-sm tabular-nums'>
+        {usageUnits ? cachedPrice : stripTrailingZeros(cachedPrice)}
+      </span>
       <div className='text-muted-foreground/50 text-[10px]'>
-        / {tokenUnitLabel}
+        {usageUnits ? t('Usage units') : null} / {tokenUnitLabel}
       </div>
     </div>
   )

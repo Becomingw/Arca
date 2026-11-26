@@ -28,15 +28,19 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatTimestampToDate } from '@/lib/format'
 
 import { REDEMPTION_FILTER_EXPIRED, REDEMPTION_STATUSES } from '../constants'
 import { isRedemptionExpired, isTimestampExpired } from '../lib'
+import { formatUsageUnits, quotaToUsageUnits } from '../lib/redemption-form'
 import type { Redemption } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
+import { RedemptionGrantSummary } from './redemption-grant-summary'
 
 export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   return [
     {
       id: 'select',
@@ -156,12 +160,12 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
     },
     {
       accessorKey: 'quota',
-      header: t('Quota'),
+      header: t('Usage units'),
       cell: ({ row }) => {
         const quota = row.getValue('quota') as number
         return (
           <StatusBadge
-            label={formatQuota(quota)}
+            label={formatUsageUnits(quotaToUsageUnits(quota), locale)}
             variant='neutral'
             copyable={false}
             className='-ml-1.5'
@@ -169,6 +173,17 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
         )
       },
       size: 120,
+    },
+    {
+      id: 'grant',
+      header: t('Grant scope and validity'),
+      cell: ({ row }) => (
+        <div className='w-48'>
+          <RedemptionGrantSummary grant={row.original.grant} />
+        </div>
+      ),
+      enableSorting: false,
+      size: 200,
     },
     {
       accessorKey: 'created_time',
@@ -185,7 +200,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
     },
     {
       accessorKey: 'expired_time',
-      header: t('Expires'),
+      header: t('Code redemption deadline'),
       meta: { mobileHidden: true },
       cell: ({ row }) => {
         const expiredTime = row.getValue('expired_time') as number
@@ -233,7 +248,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
                   className='cursor-help'
                 />
               }
-            ></TooltipTrigger>
+            />
             <TooltipContent>
               <div className='space-y-1 text-xs'>
                 <div>

@@ -24,6 +24,7 @@ import { getModuleAccessForGuard } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
 
 const rankingsSearchSchema = z.object({
+  tab: z.enum(['models', 'team']).optional().catch(undefined),
   period: z
     .enum(['today', 'week', 'month', 'year'])
     .optional()
@@ -32,7 +33,7 @@ const rankingsSearchSchema = z.object({
 
 export const Route = createFileRoute('/rankings/')({
   validateSearch: rankingsSearchSchema,
-  beforeLoad: async ({ context, location }) => {
+  beforeLoad: async ({ context, location, search }) => {
     const access = await getModuleAccessForGuard(
       context.queryClient,
       'rankings'
@@ -40,9 +41,9 @@ export const Route = createFileRoute('/rankings/')({
     if (!access.enabled) {
       throw redirect({ to: '/' })
     }
-    if (access.requireAuth) {
+    if (access.requireAuth || search.tab === 'team') {
       const { auth } = useAuthStore.getState()
-      if (!auth.user) {
+      if (!auth.user || !auth.accessToken) {
         throw redirect({
           to: '/sign-in',
           search: { redirect: location.href },

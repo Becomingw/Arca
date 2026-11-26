@@ -31,13 +31,16 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatQuota } from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { REDEMPTION_STATUS, REDEMPTION_STATUSES } from '../constants'
 import { isRedemptionExpired } from '../lib'
+import { formatUsageUnits, quotaToUsageUnits } from '../lib/redemption-form'
 import type { Redemption } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
+import { RedemptionGrantSummary } from './redemption-grant-summary'
 
 const MOBILE_SKELETON_KEYS = [
   'redemption-mobile-skeleton-1',
@@ -76,7 +79,8 @@ interface RedemptionsMobileListProps {
 }
 
 export function RedemptionsMobileList(props: RedemptionsMobileListProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const rows = props.table.getRowModel().rows
 
   if (props.isLoading) return <RedemptionsMobileSkeleton />
@@ -162,11 +166,22 @@ export function RedemptionsMobileList(props: RedemptionsMobileListProps) {
             </div>
 
             <div className='flex items-center justify-between gap-2 text-xs'>
-              <span className='text-muted-foreground'>{t('Quota')}</span>
+              <span className='text-muted-foreground'>{t('Usage units')}</span>
               <span className='font-medium tabular-nums'>
-                {formatQuota(redemption.quota)}
+                {formatUsageUnits(quotaToUsageUnits(redemption.quota), locale)}
               </span>
             </div>
+            <RedemptionGrantSummary grant={redemption.grant} />
+            {redemption.expired_time > 0 && (
+              <div className='flex flex-wrap justify-between gap-1 text-xs'>
+                <span className='text-muted-foreground'>
+                  {t('Code redemption deadline')}
+                </span>
+                <span className='tabular-nums'>
+                  {formatTimestampToDate(redemption.expired_time)}
+                </span>
+              </div>
+            )}
           </div>
         )
       })}

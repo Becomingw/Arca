@@ -28,8 +28,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FieldGroup } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getEnabledModels } from '@/features/channels/api'
 import { handleServerError } from '@/lib/handle-server-error'
-import { getServerErrorStatus } from '@/lib/server-error-message'
+import {
+  getServerErrorStatus,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -49,6 +53,8 @@ import {
   PolicyMapEditor,
   PolicyTextField,
 } from './components/policy-fields'
+import { SubscriptionAssignments } from './components/subscription-assignments'
+import { SubscriptionPlans } from './components/subscription-plans'
 import { blankAllocation, userIdPattern } from './policy'
 
 const policyQueryKey = (userId: number | undefined) =>
@@ -66,6 +72,13 @@ function EntitlementEditor({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const userId = useAuthStore((state) => state.auth.user?.id)
+  const modelCatalog = useQuery({
+    queryKey: ['entitlements', 'enabled-models', userId],
+    queryFn: async () =>
+      requireServerSuccess(await getEnabledModels()).data ?? [],
+    staleTime: 60_000,
+  })
+  const aliases = Array.isArray(modelCatalog.data) ? modelCatalog.data : []
   const [draft, setDraft] = useState(current.policy)
   const [baseline, setBaseline] = useState(current.policy)
   const [version, setVersion] = useState(current.version)
@@ -128,6 +141,7 @@ function EntitlementEditor({
       draft.default,
       ...Object.values(draft.groups ?? {}),
       ...Object.values(draft.users ?? {}),
+      ...Object.values(draft.plans ?? {}).map((plan) => plan.allocation),
     ].some(
       (allocation) =>
         allocation?.families && Object.hasOwn(allocation.families, id)
@@ -193,18 +207,42 @@ function EntitlementEditor({
           </Button>
         </div>
       </div>
-      <Tabs defaultValue='organizations'>
+      <PolicyTextField
+        label={t('Budget time zone')}
+        value={draft.timezone}
+        onChange={(value) => setPolicy('timezone', value)}
+        description={t('Use an IANA time zone, for example Asia/Taipei.')}
+      />
+      <Tabs defaultValue='plans'>
         <div className='overflow-x-auto pb-1'>
           <TabsList className='min-w-max'>
+            <TabsTrigger value='plans'>{t('Subscription plans')}</TabsTrigger>
+            <TabsTrigger value='assignments'>{t('Assignments')}</TabsTrigger>
+            <TabsTrigger value='families'>{t('Model families')}</TabsTrigger>
+            <TabsTrigger value='preview'>{t('Preview')}</TabsTrigger>
             <TabsTrigger value='organizations'>
               {t('Organizations')}
             </TabsTrigger>
-            <TabsTrigger value='families'>{t('Model families')}</TabsTrigger>
-            <TabsTrigger value='budgets'>{t('Budgets')}</TabsTrigger>
-            <TabsTrigger value='models'>{t('User model access')}</TabsTrigger>
-            <TabsTrigger value='preview'>{t('Preview')}</TabsTrigger>
+            <TabsTrigger value='budgets'>{t('Legacy allowances')}</TabsTrigger>
+            <TabsTrigger value='models'>
+              {t('Legacy user model access')}
+            </TabsTrigger>
           </TabsList>
         </div>
+        <TabsContent value='plans' key={`plans-${editorRevision}`}>
+          <SubscriptionPlans
+            draft={draft}
+            aliases={aliases}
+            onChange={(plans) => setPolicy('plans', plans)}
+          />
+        </TabsContent>
+        <TabsContent value='assignments' key={`assignments-${editorRevision}`}>
+          <SubscriptionAssignments
+            draft={draft}
+            adminId={userId}
+            onChange={setPolicy}
+          />
+        </TabsContent>
         <TabsContent
           value='organizations'
           key={`organization-${editorRevision}`}
@@ -248,6 +286,7 @@ function EntitlementEditor({
                   onChange={(model_access) =>
                     update({ ...organization, model_access })
                   }
+                  aliases={aliases}
                 />
               </FieldGroup>
             )}
@@ -273,6 +312,7 @@ function EntitlementEditor({
                   label={t('Models')}
                   entries={family.models}
                   onChange={(models) => update({ ...family, models })}
+                  choices={aliases}
                 />
               </FieldGroup>
             )}
@@ -285,20 +325,13 @@ function EntitlementEditor({
                 <CardTitle>{t('Default budget')}</CardTitle>
               </CardHeader>
               <CardContent className='flex flex-col gap-4'>
-                <PolicyTextField
-                  label={t('Budget time zone')}
-                  value={draft.timezone}
-                  onChange={(value) => setPolicy('timezone', value)}
-                  description={t(
-                    'Use an IANA time zone, for example Asia/Taipei.'
-                  )}
-                />
                 {draft.default ? (
                   <>
                     <AllocationFields
                       value={draft.default}
                       onChange={(value) => setPolicy('default', value)}
                       families={familyIds}
+                      aliases={aliases}
                     />
                     <Button
                       type='button'
@@ -344,6 +377,7 @@ function EntitlementEditor({
                       value={allocation}
                       onChange={update}
                       families={familyIds}
+                      aliases={aliases}
                     />
                   )}
                 </PolicyMapEditor>
@@ -367,6 +401,7 @@ function EntitlementEditor({
                       value={allocation}
                       onChange={update}
                       families={familyIds}
+                      aliases={aliases}
                     />
                   )}
                 </PolicyMapEditor>
@@ -384,7 +419,11 @@ function EntitlementEditor({
             validKey={isPositiveId}
           >
             {(modelAccess, update) => (
-              <ModelAccessFields value={modelAccess} onChange={update} />
+              <ModelAccessFields
+                value={modelAccess}
+                onChange={update}
+                aliases={aliases}
+              />
             )}
           </PolicyMapEditor>
         </TabsContent>
@@ -465,7 +504,7 @@ export function Entitlements() {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
-        {t('Organizations and entitlements')}
+        {t('Subscriptions and entitlements')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Content>
         {policy.isPending && <Skeleton className='h-40 w-full' />}

@@ -65,10 +65,6 @@ var accessTokenStaticResources = []AccessTokenResource{
 	{Resource: "usage", LabelKey: "Usage", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View your usage logs, statistics, tasks, and audit logs."),
 	}},
-	{Resource: "wallet", LabelKey: "Wallet", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
-		accessTokenView("View balance, top-up records, subscriptions, and referral information."),
-		accessTokenEdit("Top up, pay for subscriptions, check in, and transfer referral rewards."),
-	}},
 	{Resource: "account_security", LabelKey: "Account security", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View Passkey, two-factor, and sign-in binding status."),
 		accessTokenEdit("Includes changes that require security verification, such as password, two-factor settings, and account deletion."),
@@ -76,10 +72,6 @@ var accessTokenStaticResources = []AccessTokenResource{
 	{Resource: "user", LabelKey: "Users", group: AccessTokenGroupAdmin, minRole: common.RoleAdminUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View users, their sign-in bindings, and permission settings."),
 		accessTokenEdit("Create, edit, disable, and delete users, and reset their security settings."),
-	}},
-	{Resource: "billing", LabelKey: "Billing management", group: AccessTokenGroupAdmin, minRole: common.RoleAdminUser, Actions: []authz.ActionDefinition{
-		accessTokenView("View all top-up records, subscription plans, and user subscriptions."),
-		accessTokenEdit("Complete top-up orders and manage subscription plans and user subscriptions."),
 	}},
 	{Resource: "model", LabelKey: "Models", group: AccessTokenGroupAdmin, minRole: common.RoleAdminUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View models and vendors, and preview upstream sync."),

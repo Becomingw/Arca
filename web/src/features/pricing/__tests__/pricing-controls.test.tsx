@@ -34,7 +34,6 @@ function toolbarProps(): PricingToolbarProps {
     totalCount: 2,
     sortBy: 'name',
     tokenUnit: 'M',
-    showRechargePrice: false,
     viewMode: 'card',
     quotaTypeFilter: 'all',
     endpointTypeFilter: 'all',
@@ -43,7 +42,6 @@ function toolbarProps(): PricingToolbarProps {
     tagFilter: 'all',
     onSortChange: vi.fn(),
     onTokenUnitChange: vi.fn(),
-    onRechargePriceChange: vi.fn(),
     onViewModeChange: vi.fn(),
     onQuotaTypeChange: vi.fn(),
     onEndpointTypeChange: vi.fn(),
@@ -318,21 +316,11 @@ describe('pricing controls', () => {
     expect(props.onTokenUnitChange).toHaveBeenCalledTimes(1)
   })
 
-  it('changes the recharge display mode with an accessible selected state', async () => {
-    const props = toolbarProps()
-    const user = userEvent.setup()
-    const { rerender } = render(<PricingToolbar {...props} />)
-    await user.click(screen.getByRole('button', { name: 'Recharge' }))
-    expect(props.onRechargePriceChange).toHaveBeenCalledWith(true)
-    rerender(<PricingToolbar {...props} showRechargePrice />)
-    expect(screen.getByRole('button', { name: 'Recharge' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
-    expect(screen.getByRole('button', { name: 'Standard' })).toHaveAttribute(
-      'aria-pressed',
-      'false'
-    )
+  it('omits the recharge display control', () => {
+    render(<PricingToolbar {...toolbarProps()} />)
+    expect(
+      screen.queryByRole('button', { name: 'Recharge' })
+    ).not.toBeInTheDocument()
   })
 
   it('switches to table view with the keyboard and exposes the selected view', async () => {
@@ -351,13 +339,13 @@ describe('pricing controls', () => {
     )
   })
 
-  it('selects price sorting from the shared dropdown', async () => {
+  it('selects usage-rate sorting from the shared dropdown', async () => {
     const props = toolbarProps()
     const user = userEvent.setup()
     render(<PricingToolbar {...props} />)
     await user.click(screen.getByRole('button', { name: 'Name' }))
     await user.click(
-      screen.getByRole('menuitem', { name: 'Input Price: Low to High' })
+      screen.getByRole('menuitem', { name: 'Input usage rate: Low to High' })
     )
     expect(props.onSortChange).toHaveBeenCalledWith('input-price-low')
   })

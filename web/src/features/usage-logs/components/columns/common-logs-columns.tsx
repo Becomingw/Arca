@@ -49,7 +49,11 @@ import { taskUsageUnitLabel } from '@/features/pricing/lib/task-price-display'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
+import {
+  formatLogQuota,
+  formatQuotaUnits,
+  formatTimestampToDate,
+} from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -119,7 +123,14 @@ function buildDetailSegments(
   language: string,
   usageSchema?: BillingUsageSchema
 ): DetailSegment[] {
-  const segments = buildTypeDetailSegments(log, other, t, language, usageSchema)
+  const segments = buildTypeDetailSegments(
+    log,
+    other,
+    t,
+    language,
+    isAdmin,
+    usageSchema
+  )
   const adminSegments: DetailSegment[] = []
   // Quota saturation is a rare, admin-only anomaly marker; surface it first
   // and in danger styling so it stands out on the related billing log. The
@@ -136,6 +147,7 @@ function buildTypeDetailSegments(
   other: LogOtherData | null,
   t: (key: string, opts?: Record<string, unknown>) => string,
   language: string,
+  isAdmin: boolean,
   usageSchema?: BillingUsageSchema
 ): DetailSegment[] {
   // Top-up, audit, and login logs can carry a localized operation descriptor.
@@ -161,12 +173,13 @@ function buildTypeDetailSegments(
       })
     }
     segments.push({
-      text: `${t('Fee')}: ${formatLogQuota(other?.fee_quota ?? log.quota)}`,
+      text: `${t(isAdmin ? 'Fee' : 'Usage units')}: ${(isAdmin ? formatLogQuota : formatQuotaUnits)(other?.fee_quota ?? log.quota)}`,
       muted: true,
     })
     return segments
   }
 
+  if (!isAdmin) return [{ text: other?.matched_tier || t('Details') }]
   if (!other) return []
 
   const segments: DetailSegment[] = []
@@ -351,8 +364,7 @@ function buildTypeDetailSegments(
 
 export function useCommonLogsColumns(
   isAdmin: boolean,
-  isRoot: boolean,
-  showBillingSource = false
+  isRoot: boolean
 ): ColumnDef<UsageLog>[] {
   const { t } = useTranslation()
   const currency = useSystemConfigStore((state) => state.config.currency)
@@ -778,7 +790,7 @@ export function useCommonLogsColumns(
       },
       {
         accessorKey: 'quota',
-        header: t('Cost'),
+        header: t(isAdmin ? 'Cost' : 'Usage units'),
         cell: ({ row }) => {
           const log = row.original
           if (!isDisplayableLogType(log.type)) return null
@@ -789,7 +801,7 @@ export function useCommonLogsColumns(
             <LogCostDisplay
               quota={quota}
               other={other}
-              showBillingSource={showBillingSource}
+              showOperatorCosts={isAdmin}
             />
           )
         },
@@ -907,5 +919,5 @@ export function useCommonLogsColumns(
     return columns
     // Log formatters read currency settings from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, isAdmin, isRoot, showBillingSource, currency])
+  }, [t, isAdmin, isRoot, currency])
 }

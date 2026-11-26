@@ -57,6 +57,7 @@ import {
   type DynamicPriceLabelKind,
   type DynamicPriceOptions,
 } from '../lib/dynamic-price'
+import { formatUsageRate } from '../lib/price'
 import { getTaskPricingDisplayTiers } from '../lib/task-matrix-display'
 import {
   taskPriceLabel,
@@ -94,7 +95,7 @@ type DynamicPricingBreakdownProps = {
   usageSchema?: BillingUsageSchema
   taskPriceOptions?: Pick<
     DynamicPriceOptions,
-    'showRechargePrice' | 'priceRate' | 'usdExchangeRate'
+    'showRechargePrice' | 'priceRate' | 'usdExchangeRate' | 'usageUnits'
   >
   /**
    * Settlement usage facts from the consume log. Used to highlight the
@@ -209,12 +210,21 @@ function formatBreakdownPrice(
   taskPriceOptions: DynamicPricingBreakdownProps['taskPriceOptions'],
   language: string
 ): string {
-  const amount =
+  const needsTaskUnit =
     field.labelKind === 'schema' ||
     field.unit === 'request' ||
     field.unit === 'image'
-      ? formatTaskUsageUnitPrice(value, { tokenUnit: 'M', ...taskPriceOptions })
-      : `${symbol}${(value * rate).toFixed(4)}`
+  let amount: string
+  if (needsTaskUnit) {
+    amount = formatTaskUsageUnitPrice(value, {
+      tokenUnit: 'M',
+      ...taskPriceOptions,
+    })
+  } else if (taskPriceOptions?.usageUnits) {
+    amount = formatUsageRate(value)
+  } else {
+    amount = `${symbol}${(value * rate).toFixed(4)}`
+  }
   if (field.unit === 'second') return `${amount}/${t('s')}`
   if (field.unit === 'count') {
     return `${amount}/${taskUsageUnitLabel(field, language, t('unit'))}`
@@ -443,19 +453,16 @@ export function DynamicPricingBreakdown({
       )
     ) {
       for (const field of fields) field.showTokenUnit = true
+      const perImage = tiers.some(
+        (tier) => !isTaskBreakdownTier(tier) && tier.imageCount
+      )
+      const usageLabel = perImage ? 'Usage per image' : 'Usage per request'
+      const priceLabel = perImage ? 'Price per image' : 'Price per request'
       fields.push({
         id: 'fixedPrice',
-        label: tiers.some(
-          (tier) => !isTaskBreakdownTier(tier) && tier.imageCount
-        )
-          ? 'Price per image'
-          : 'Price per request',
+        label: taskPriceOptions?.usageUnits ? usageLabel : priceLabel,
         labelKind: 'i18n',
-        unit: tiers.some(
-          (tier) => !isTaskBreakdownTier(tier) && tier.imageCount
-        )
-          ? 'image'
-          : 'request',
+        unit: perImage ? 'image' : 'request',
         value: (tier) =>
           !isTaskBreakdownTier(tier) && tier.billingUnit === 'request'
             ? Number(tier.fixedPrice)
@@ -476,10 +483,14 @@ export function DynamicPricingBreakdown({
           </span>
           <div>
             <div className='text-foreground text-base font-medium'>
-              {t('Dynamic Pricing')}
+              {taskPriceOptions?.usageUnits
+                ? t('Dynamic usage rates')
+                : t('Dynamic Pricing')}
             </div>
             <div className='text-muted-foreground text-xs'>
-              {t('Prices vary by usage tier and request conditions')}
+              {taskPriceOptions?.usageUnits
+                ? t('Rates vary by usage tier and request conditions')
+                : t('Prices vary by usage tier and request conditions')}
             </div>
           </div>
         </div>
@@ -495,7 +506,9 @@ export function DynamicPricingBreakdown({
                   : 'text-foreground mb-2 text-sm font-semibold'
               }
             >
-              {t('Tiered price table')}
+              {taskPriceOptions?.usageUnits
+                ? t('Usage rates by tier')
+                : t('Tiered price table')}
             </div>
           )}
           <div className='space-y-1.5 sm:hidden'>

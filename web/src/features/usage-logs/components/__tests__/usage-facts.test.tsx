@@ -64,7 +64,11 @@ function makeLog(other: LogOtherData): UsageLog {
   }
 }
 
-function renderDetails(other: LogOtherData, promptTokens = 0): QueryClient {
+function renderDetails(
+  other: LogOtherData,
+  promptTokens = 0,
+  isAdmin = false
+): QueryClient {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -80,7 +84,7 @@ function renderDetails(other: LogOtherData, promptTokens = 0): QueryClient {
     <QueryClientProvider client={queryClient}>
       <DetailsDialog
         log={{ ...makeLog(other), prompt_tokens: promptTokens }}
-        isAdmin={false}
+        isAdmin={isAdmin}
         isRoot={false}
         open
         onOpenChange={() => undefined}
@@ -94,7 +98,7 @@ function rowValue(label: string): string | null {
   return screen.getByText(label).nextElementSibling?.textContent ?? null
 }
 
-test('shows the recorded request and response models in log details', () => {
+test('shows a member the recorded request and response models', () => {
   const queryClient = renderDetails({
     response_model: {
       requested_model: 'requested-model',
@@ -109,7 +113,7 @@ test('shows the recorded request and response models in log details', () => {
   queryClient.clear()
 })
 
-test('splits OpenAI cache writes into 30-minute and 12-hour rows with their prices', () => {
+test('shows administrators the split OpenAI cache writes and their prices', () => {
   const queryClient = renderDetails(
     {
       model_ratio: 5,
@@ -122,7 +126,8 @@ test('splits OpenAI cache writes into 30-minute and 12-hour rows with their pric
       cache_creation_tokens_12h: 1000,
       cache_creation_ratio_12h: 2.5,
     },
-    4000
+    4000,
+    true
   )
   expect(screen.getByText('500').previousElementSibling).toHaveTextContent(
     'Cache Write (30m)'
@@ -160,7 +165,7 @@ test('keeps one cache write row and no cache prices for OpenAI logs without 12-h
   queryClient.clear()
 })
 
-test('shows matching GPT cache duration labels in billing details and the tier table', () => {
+test('shows administrators the GPT cache duration labels in billing details and the tier table', () => {
   const queryClient = renderDetails(
     {
       billing_mode: 'tiered_expr',
@@ -173,7 +178,8 @@ test('shows matching GPT cache duration labels in billing details and the tier t
       billing_tokens: { p: 3, c: 972, cr: 1418, cc: 2133, cc12h: 0 },
       group_ratio: 1,
     },
-    3554
+    3554,
+    true
   )
   expect(
     screen.getByRole('columnheader', { name: 'Cache Write (30m)' })
@@ -197,7 +203,7 @@ test('shows matching GPT cache duration labels in billing details and the tier t
   queryClient.clear()
 })
 
-test('shows explicitly free cache writes as zero in the tier table', () => {
+test('shows administrators explicitly free cache writes as zero in the tier table', () => {
   const queryClient = renderDetails(
     {
       billing_mode: 'tiered_expr',
@@ -205,7 +211,8 @@ test('shows explicitly free cache writes as zero in the tier table', () => {
       matched_tier: 'base',
       cache_creation_tokens: 100,
     },
-    200
+    200,
+    true
   )
   const table = within(screen.getByRole('table'))
   expect(
@@ -222,21 +229,31 @@ test('shows explicitly free cache writes as zero in the tier table', () => {
 })
 
 describe('usage facts billing details', () => {
-  test('shows the settled image count and a per-image price', () => {
-    const queryClient = renderDetails({
-      billing_mode: 'tiered_expr',
-      expr_b64: btoa('tier("image", fixed(0.04)) * image_count'),
-      billing_unit: 'request',
-      fixed_price: 0.04,
-      image_count: 2,
-      matched_tier: 'image',
-    })
-    expect(
-      screen.getByText('Billable image count').parentElement
-    ).toHaveTextContent('2')
-    expect(screen.getAllByText(/\/image/).length).toBeGreaterThan(0)
-    queryClient.clear()
-  })
+  test.each([true, false])(
+    'shows the settled image count and only shows a per-image price to administrators (admin=%s)',
+    (isAdmin) => {
+      const queryClient = renderDetails(
+        {
+          billing_mode: 'tiered_expr',
+          expr_b64: btoa('tier("image", fixed(0.04)) * image_count'),
+          billing_unit: 'request',
+          fixed_price: 0.04,
+          image_count: 2,
+          matched_tier: 'image',
+        },
+        0,
+        isAdmin
+      )
+      expect(rowValue('Billable image count')).toBe('2')
+      if (isAdmin) {
+        expect(screen.getAllByText(/\/image/).length).toBeGreaterThan(0)
+      } else {
+        expect(screen.queryByText(/\/image/)).not.toBeInTheDocument()
+        expect(rowValue('Usage units')).toBe('0.01')
+      }
+      queryClient.clear()
+    }
+  )
   const queryClients: QueryClient[] = []
 
   test('shows actual billable image and cache tokens while retaining the aggregate cache count', () => {
@@ -288,7 +305,7 @@ describe('usage facts billing details', () => {
     queryClients.length = 0
   })
 
-  test('renders one raw-key row per usage fact before total cost', () => {
+  test('renders fields, the matched tier and usage units for members', () => {
     const expression = 'tier("720P", u("seconds") * 5)'
     queryClients.push(
       renderDetails({
@@ -306,13 +323,14 @@ describe('usage facts billing details', () => {
     expect(screen.getByText('Usage parameters')).toBeInTheDocument()
     expect(rowValue('resolution')).toBe('720P')
     expect(rowValue('seconds')).toBe('5')
-    expect(rowValue('Billing Mode')).toBe('Dynamic Pricing')
+    expect(screen.queryByText('Billing Mode')).not.toBeInTheDocument()
+    expect(screen.queryByText('Dynamic Pricing')).not.toBeInTheDocument()
     expect(rowValue('Matched Tier')).toBe('720P')
 
     const usageHeader = screen.getByText('Usage parameters')
-    const totalCost = screen.getByText('Total Cost')
+    const usageUnits = screen.getByText('Usage units')
     expect(
-      usageHeader.compareDocumentPosition(totalCost) &
+      usageHeader.compareDocumentPosition(usageUnits) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
@@ -327,7 +345,7 @@ describe('usage facts billing details', () => {
     expect(screen.queryByText('Usage parameters')).toBeNull()
     expect(screen.queryByText('resolution')).toBeNull()
     expect(screen.queryByText('seconds')).toBeNull()
-    expect(screen.getByText('Total Cost')).toBeInTheDocument()
+    expect(rowValue('Usage units')).toBe('0.01')
   })
 
   test('does not render usage parameter rows when usage_facts is empty', () => {
@@ -341,6 +359,6 @@ describe('usage facts billing details', () => {
     expect(screen.queryByText('Usage parameters')).toBeNull()
     expect(screen.queryByText('resolution')).toBeNull()
     expect(screen.queryByText('seconds')).toBeNull()
-    expect(screen.getByText('Total Cost')).toBeInTheDocument()
+    expect(rowValue('Usage units')).toBe('0.01')
   })
 })

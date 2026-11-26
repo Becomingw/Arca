@@ -705,7 +705,6 @@ func TestAuditRoleSnapshotSurvivesActorChanges(t *testing.T) {
 	router.POST("/change-role", middleware.UserAuth(), func(c *gin.Context) {
 		recordLoginAudit(user, c)
 		recordUserSecurityAudit(c, user.Id, "user.security_verify", nil)
-		recordSubscriptionResetUserLogs(c, &model.SubscriptionResetResult{ResetCount: 1, PlanId: 1, PlanTitle: "Plan", AffectedUserIds: []int{999}}, auditOperatorInfo(c))
 		require.NoError(t, model.DB.Model(user).Update("role", common.RoleAdminUser).Error)
 		c.Status(200)
 	})
@@ -720,7 +719,7 @@ func TestAuditRoleSnapshotSurvivesActorChanges(t *testing.T) {
 	require.NoError(t, model.DB.Unscoped().Delete(user).Error)
 	entries, total, err = model.GetAuditLogs(model.AuditLogFilter{}, 0, 20, common.RoleRootUser)
 	require.NoError(t, err)
-	assert.EqualValues(t, 4, total)
+	assert.EqualValues(t, 3, total)
 	for _, entry := range entries {
 		assert.Equal(t, common.RoleRootUser, entry.ActorRole)
 	}
@@ -739,13 +738,12 @@ func TestSecurityAndOperationEventsUseAuditTable(t *testing.T) {
 		recordUserSecurityAudit(c, user.Id, action, nil)
 	}
 	recordManageAudit(c, "option.update", map[string]any{"key": "safe"})
-	recordSubscriptionResetUserLogs(c, &model.SubscriptionResetResult{ResetCount: 1, PlanId: 1, PlanTitle: "Plan", AffectedUserIds: []int{user.Id}}, &model.AuditAdminInfo{AdminID: user.Id})
 	for _, typ := range []int{model.LogTypeTopup, model.LogTypeConsume, model.LogTypeRefund, model.LogTypeSystem} {
 		model.RecordLog(user.Id, typ, common.NewMessage("business entry"))
 	}
 	var audits []model.AuditLog
 	require.NoError(t, model.LOG_DB.Find(&audits).Error)
-	assert.Len(t, audits, 10)
+	assert.Len(t, audits, 9)
 	for _, entry := range audits {
 		assert.Equal(t, "correlated-request", entry.RequestId)
 		assert.Equal(t, user.Role, entry.ActorRole)
@@ -757,7 +755,7 @@ func TestSecurityAndOperationEventsUseAuditTable(t *testing.T) {
 	require.NoError(t, err)
 	var count int64
 	require.NoError(t, model.LOG_DB.Model(&model.AuditLog{}).Count(&count).Error)
-	assert.EqualValues(t, 10, count)
+	assert.EqualValues(t, 9, count)
 }
 
 // Released schemas copied from v1.0.0-rc.33; only the Go type names differ.

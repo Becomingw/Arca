@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 
 import type { TokenUnit } from './types'
 
@@ -40,12 +40,12 @@ export type SortOption = (typeof SORT_OPTIONS)[keyof typeof SORT_OPTIONS]
 export function getSortLabels(t: TFunction): Record<SortOption, string> {
   return {
     [SORT_OPTIONS.NAME]: t('Name'),
-    [SORT_OPTIONS.INPUT_PRICE_LOW]: t('Input Price: Low to High'),
-    [SORT_OPTIONS.INPUT_PRICE_HIGH]: t('Input Price: High to Low'),
-    [SORT_OPTIONS.OUTPUT_PRICE_LOW]: t('Output Price: Low to High'),
-    [SORT_OPTIONS.OUTPUT_PRICE_HIGH]: t('Output Price: High to Low'),
-    [SORT_OPTIONS.REQUEST_PRICE_LOW]: t('Per-request Price: Low to High'),
-    [SORT_OPTIONS.REQUEST_PRICE_HIGH]: t('Per-request Price: High to Low'),
+    [SORT_OPTIONS.INPUT_PRICE_LOW]: t('Input usage rate: Low to High'),
+    [SORT_OPTIONS.INPUT_PRICE_HIGH]: t('Input usage rate: High to Low'),
+    [SORT_OPTIONS.OUTPUT_PRICE_LOW]: t('Output usage rate: Low to High'),
+    [SORT_OPTIONS.OUTPUT_PRICE_HIGH]: t('Output usage rate: High to Low'),
+    [SORT_OPTIONS.REQUEST_PRICE_LOW]: t('Per-request usage rate: Low to High'),
+    [SORT_OPTIONS.REQUEST_PRICE_HIGH]: t('Per-request usage rate: High to Low'),
   }
 }
 

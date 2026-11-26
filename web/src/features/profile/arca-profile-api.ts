@@ -102,10 +102,19 @@ export interface ArcaTeamActivity {
   members: {
     id: string
     label: string
+    anonymous: boolean
     rank: number
     estimated_minutes: number
+    active_days: number
+    longest_streak: number
+    active_today: boolean
+    requests: number | null
+    tokens: number | null
   }[]
+  popular_models: { model: string; requests: number; tokens: number }[]
+  activity_bands: { start_second: number; windows: number }[]
   suppressed: boolean
+  usage_available: boolean
   timezone: string
 }
 

@@ -101,7 +101,7 @@ func calcViolationFeeQuota(amount, groupRatio float64) int {
 // ChargeViolationFeeIfNeeded charges an additional fee after the normal flow finishes (including refund).
 // It uses Grok fee settings as the fee policy.
 func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
-	if ctx == nil || relayInfo == nil || apiErr == nil {
+	if ctx == nil || relayInfo == nil || apiErr == nil || model.ArcaEntitlementRuntimeEnabled() {
 		return false
 	}
 	//if relayInfo.IsPlayground {

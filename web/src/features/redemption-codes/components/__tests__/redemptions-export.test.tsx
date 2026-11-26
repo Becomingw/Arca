@@ -52,11 +52,11 @@ function captureDownloads() {
       revokeObjectURL: vi.fn(),
     })
   )
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
-    function (this: HTMLAnchorElement) {
-      downloads.push({ filename: this.download, blob: currentBlob })
-    }
-  )
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement
+  ) {
+    downloads.push({ filename: this.download, blob: currentBlob })
+  })
   return downloads
 }
 
@@ -92,8 +92,8 @@ test.each([
   {
     name: true,
     quota: true,
-    txt: 'launch\tcodeA\t$10.00\nlaunch\tcodeB\t$10.00\n',
-    md: '| Name | Code | Quota |\n| --- | --- | --- |\n| launch | codeA | $10.00 |\n| launch | codeB | $10.00 |\n',
+    txt: 'launch\tcodeA\t10\nlaunch\tcodeB\t10\n',
+    md: '| Name | Code | Usage units |\n| --- | --- | --- |\n| launch | codeA | 10 |\n| launch | codeB | 10 |\n',
   },
   {
     name: true,
@@ -104,8 +104,8 @@ test.each([
   {
     name: false,
     quota: true,
-    txt: 'codeA\t$10.00\ncodeB\t$10.00\n',
-    md: '| Code | Quota |\n| --- | --- |\n| codeA | $10.00 |\n| codeB | $10.00 |\n',
+    txt: 'codeA\t10\ncodeB\t10\n',
+    md: '| Code | Usage units |\n| --- | --- |\n| codeA | 10 |\n| codeB | 10 |\n',
   },
   {
     name: false,
@@ -122,7 +122,7 @@ test.each([
       const onClose = vi.fn()
       const view = render(
         <RedemptionsExportDialog
-          data={{ keys: ['codeA', 'codeB'], name: 'launch', quota: '$10.00' }}
+          data={{ keys: ['codeA', 'codeB'], name: 'launch', quota: '10' }}
           onClose={onClose}
         />
       )
@@ -133,7 +133,9 @@ test.each([
         })
       )
       const name = screen.getByRole('checkbox', { name: 'Include name' })
-      const quota = screen.getByRole('checkbox', { name: 'Include quota' })
+      const quota = screen.getByRole('checkbox', {
+        name: 'Include usage units',
+      })
       expect(name).not.toHaveAttribute('aria-disabled', 'true')
       expect(quota).not.toHaveAttribute('aria-disabled', 'true')
       expect(name).toBeChecked()
@@ -166,7 +168,7 @@ test('keeps names containing table delimiters and markup inside one Markdown cel
   const user = userEvent.setup()
   render(
     <RedemptionsExportDialog
-      data={{ keys: ['codeA'], name: 'A | [B]\n<x>', quota: '$10' }}
+      data={{ keys: ['codeA'], name: 'A | [B]\n<x>', quota: '10' }}
       onClose={() => undefined}
     />
   )
@@ -174,11 +176,11 @@ test('keeps names containing table delimiters and markup inside one Markdown cel
   await user.click(screen.getByRole('radio', { name: 'Save as Markdown' }))
   await user.click(screen.getByRole('button', { name: 'Done' }))
   expect(await readDownload(downloads[0])).toBe(
-    '| Name | Code | Quota |\n| --- | --- | --- |\n| A \\| \\[B\\] \\<x\\> | codeA | $10 |\n'
+    '| Name | Code | Usage units |\n| --- | --- | --- |\n| A \\| \\[B\\] \\<x\\> | codeA | 10 |\n'
   )
 })
 
-test('successful batch creation opens export with returned codes and the configured currency', async () => {
+test('successful batch creation opens export with returned codes and neutral usage units', async () => {
   const downloads = captureDownloads()
   const user = userEvent.setup()
   useSystemConfigStore.getState().setConfig({
@@ -201,7 +203,7 @@ test('successful batch creation opens export with returned codes and the configu
   fireEvent.change(within(createDialog).getByLabelText('Quantity'), {
     target: { value: '2' },
   })
-  fireEvent.change(within(createDialog).getByLabelText('Quota (CNY)'), {
+  fireEvent.change(within(createDialog).getByLabelText('Usage units'), {
     target: { value: '2000' },
   })
   await user.click(
@@ -232,7 +234,7 @@ test('successful batch creation opens export with returned codes and the configu
     ).not.toBeInTheDocument()
   )
   expect(await readDownload(downloads[0])).toBe(
-    'batch\tcreatedA\t¥2,000\nbatch\tcreatedB\t¥2,000\n'
+    'batch\tcreatedA\t2,000\nbatch\tcreatedB\t2,000\n'
   )
 })
 
@@ -263,7 +265,7 @@ test('completion defaults to no file and closes without downloading', async () =
   const onClose = vi.fn()
   render(
     <RedemptionsExportDialog
-      data={{ keys: ['codeA'], name: 'launch', quota: '$10' }}
+      data={{ keys: ['codeA'], name: 'launch', quota: '10' }}
       onClose={onClose}
     />
   )
@@ -275,7 +277,7 @@ test('completion defaults to no file and closes without downloading', async () =
     screen.queryByRole('checkbox', { name: 'Include name' })
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('checkbox', { name: 'Include quota' })
+    screen.queryByRole('checkbox', { name: 'Include usage units' })
   ).not.toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Done' }))
   expect(downloads).toEqual([])
@@ -288,7 +290,7 @@ test('unchecking save as a file hides export settings and completes without down
   const onClose = vi.fn()
   render(
     <RedemptionsExportDialog
-      data={{ keys: ['codeA'], name: 'launch', quota: '$10' }}
+      data={{ keys: ['codeA'], name: 'launch', quota: '10' }}
       onClose={onClose}
     />
   )
@@ -303,7 +305,7 @@ test('unchecking save as a file hides export settings and completes without down
     screen.queryByRole('checkbox', { name: 'Include name' })
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('checkbox', { name: 'Include quota' })
+    screen.queryByRole('checkbox', { name: 'Include usage units' })
   ).not.toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Done' }))
   expect(downloads).toEqual([])

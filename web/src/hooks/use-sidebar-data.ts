@@ -21,7 +21,6 @@ import {
   Box,
   ClipboardList,
   Building2,
-  CreditCard,
   FileText,
   FlaskConical,
   Key,
@@ -34,9 +33,9 @@ import {
   Settings,
   ShieldCheck,
   Ticket,
+  Trophy,
   User,
   Users,
-  Wallet,
   Workflow,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -88,9 +87,9 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             icon: MessageSquare,
           },
           {
-            title: t('Team Activity'),
-            url: '/team-activity',
-            icon: Users,
+            title: t('Rankings'),
+            url: '/rankings',
+            icon: Trophy,
           },
           {
             title: t('API Keys'),
@@ -120,11 +119,6 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
         id: 'personal',
         title: t('Personal'),
         items: [
-          {
-            title: t('Wallet'),
-            url: '/wallet',
-            icon: Wallet,
-          },
           {
             title: t('Profile'),
             url: '/profile',
@@ -171,11 +165,6 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,
-          },
-          {
-            title: t('Subscriptions'),
-            url: '/subscriptions',
-            icon: CreditCard,
           },
           {
             title: t('System Info'),

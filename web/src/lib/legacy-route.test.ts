@@ -51,7 +51,7 @@ describe('legacy frontend route migration', () => {
       '/sign-in?redirect=%2Fkeys#continue'
     )
     expect(resolveLegacyRoute('/console/topup?source=email#orders')).toBe(
-      '/wallet?source=email#orders'
+      '/profile?source=email#orders'
     )
   })
 
@@ -61,7 +61,7 @@ describe('legacy frontend route migration', () => {
       dashboard: '/system-settings/content/dashboard',
       chats: '/system-settings/content/chat',
       drawing: '/system-settings/content/drawing',
-      payment: '/system-settings/billing/payment',
+      payment: '/system-settings/billing/quota',
       ratio: '/system-settings/billing/model-pricing',
       ratelimit: '/system-settings/security/rate-limit',
       models: '/system-settings/models/global',

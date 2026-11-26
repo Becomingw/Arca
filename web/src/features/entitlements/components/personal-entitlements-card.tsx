@@ -43,7 +43,7 @@ export function PersonalEntitlementsCard({
       <CardHeader>
         <CardTitle>{t('My entitlements')}</CardTitle>
         <CardDescription>
-          {t('Usage is based on gateway pricing in USD.')}
+          {t('Your subscription controls model access and usage allowances.')}
         </CardDescription>
       </CardHeader>
       <CardContent>

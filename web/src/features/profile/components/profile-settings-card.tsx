@@ -34,16 +34,12 @@ interface ProfileSettingsCardProps {
   profile: UserProfile | null
   loading: boolean
   onProfileUpdate: () => void
-  quotaRemindEnabled: boolean
-  quotaRemindThreshold: number
 }
 
 export function ProfileSettingsCard({
   profile,
   loading,
   onProfileUpdate,
-  quotaRemindEnabled,
-  quotaRemindThreshold,
 }: ProfileSettingsCardProps) {
   const { t } = useTranslation()
 
@@ -55,7 +51,7 @@ export function ProfileSettingsCard({
           <Skeleton className='mt-2 h-4 w-48' />
         </CardHeader>
         <CardContent className='space-y-4 p-3 sm:p-5'>
-          {['notifications', 'threshold', 'preferences'].map((key) => (
+          {['notifications', 'preferences'].map((key) => (
             <Skeleton key={key} className='h-20 w-full' />
           ))}
         </CardContent>
@@ -71,12 +67,7 @@ export function ProfileSettingsCard({
       iconTone='info'
       disableHoverEffect
     >
-      <NotificationTab
-        profile={profile}
-        onUpdate={onProfileUpdate}
-        quotaRemindEnabled={quotaRemindEnabled}
-        quotaRemindThreshold={quotaRemindThreshold}
-      />
+      <NotificationTab profile={profile} onUpdate={onProfileUpdate} />
     </TitledCard>
   )
 }

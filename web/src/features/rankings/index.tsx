@@ -22,6 +22,8 @@ import { useTranslation } from 'react-i18next'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useAuthStore } from '@/stores/auth-store'
 
 import {
   MarketShareSection,
@@ -29,31 +31,22 @@ import {
   PulseSection,
   RankingsHero,
 } from './components'
+import { TeamRankings } from './components/team-rankings'
 import { useRankings } from './hooks/use-rankings'
 import type { RankingPeriod } from './types'
-
-const VALID_PERIODS: RankingPeriod[] = ['today', 'week', 'month', 'year']
 
 export function Rankings() {
   const { t } = useTranslation()
   const search = useSearch({ from: '/rankings/' })
   const navigate = useNavigate()
-
-  const period: RankingPeriod = VALID_PERIODS.includes(
-    search.period as RankingPeriod
+  const userId = useAuthStore((state) =>
+    state.auth.accessToken ? state.auth.user?.id : undefined
   )
-    ? (search.period as RankingPeriod)
-    : 'week'
-
-  const rankingsQuery = useRankings(period)
-  const snapshot = rankingsQuery.data?.data
-
-  const handlePeriodChange = (next: RankingPeriod) => {
-    navigate({
-      to: '/rankings',
-      search: (prev) => ({ ...prev, period: next }),
-    })
-  }
+  const period = search.period ?? 'week'
+  const tab =
+    userId && (search.tab === 'team' || (!search.tab && !search.period))
+      ? 'team'
+      : 'models'
 
   return (
     <PublicLayout showMainContainer={false}>
@@ -73,42 +66,86 @@ export function Rankings() {
               'linear-gradient(to bottom, black 40%, transparent 100%)',
           }}
         />
-        <PageTransition className='relative mx-auto w-full max-w-[1280px] space-y-8 px-3 pt-16 pb-10 sm:px-6 sm:pt-20 sm:pb-12 xl:px-8'>
-          <RankingsHero period={period} onPeriodChange={handlePeriodChange} />
-
-          {rankingsQuery.isLoading ? (
-            <RankingsLoading />
-          ) : !snapshot ? (
-            <RankingsError
-              message={
-                rankingsQuery.error instanceof Error
-                  ? rankingsQuery.error.message
-                  : t('Unable to load rankings data')
-              }
-            />
+        <PageTransition className='relative mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-3 pt-16 pb-10 sm:px-6 sm:pt-20 sm:pb-12 xl:px-8'>
+          <h1 className='text-[clamp(1.75rem,4vw,2.5rem)] leading-[1.15] font-bold tracking-tight'>
+            {t('Rankings')}
+          </h1>
+          {userId ? (
+            <Tabs
+              value={tab}
+              className='gap-4'
+              onValueChange={(next) => {
+                if (next !== 'models' && next !== 'team') return
+                void navigate({
+                  to: '/rankings',
+                  search: (previous) => ({ ...previous, tab: next }),
+                })
+              }}
+            >
+              <TabsList aria-label={t('Rankings')}>
+                <TabsTrigger value='team'>{t('Team activity')}</TabsTrigger>
+                <TabsTrigger value='models'>{t('Model rankings')}</TabsTrigger>
+              </TabsList>
+              <TabsContent value='team'>
+                <TeamRankings userId={userId} />
+              </TabsContent>
+              <TabsContent value='models'>
+                <PlatformRankings period={period} />
+              </TabsContent>
+            </Tabs>
           ) : (
-            <>
-              <ModelsSection
-                history={snapshot.models_history}
-                rows={snapshot.models}
-                period={period}
-              />
-
-              <MarketShareSection
-                history={snapshot.vendor_share_history}
-                rows={snapshot.vendors}
-                period={period}
-              />
-
-              <PulseSection
-                movers={snapshot.top_movers}
-                droppers={snapshot.top_droppers}
-              />
-            </>
+            <PlatformRankings period={period} />
           )}
         </PageTransition>
       </div>
     </PublicLayout>
+  )
+}
+
+function PlatformRankings({ period }: { period: RankingPeriod }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const rankingsQuery = useRankings(period)
+  const snapshot = rankingsQuery.data?.data
+  const message =
+    rankingsQuery.error instanceof Error
+      ? rankingsQuery.error.message
+      : t('Unable to load rankings data')
+
+  return (
+    <div className='flex flex-col gap-6'>
+      <RankingsHero
+        period={period}
+        onPeriodChange={(next) => {
+          void navigate({
+            to: '/rankings',
+            search: (previous) => ({ ...previous, period: next }),
+          })
+        }}
+      />
+      {rankingsQuery.isLoading && <RankingsLoading />}
+      {!rankingsQuery.isLoading && !snapshot && (
+        <RankingsError message={message} />
+      )}
+      {snapshot && (
+        <>
+          <ModelsSection
+            history={snapshot.models_history}
+            rows={snapshot.models}
+            period={period}
+          />
+          <MarketShareSection
+            history={snapshot.vendor_share_history}
+            rows={snapshot.vendors}
+            period={period}
+          />
+          <PulseSection
+            movers={snapshot.top_movers}
+            droppers={snapshot.top_droppers}
+          />
+        </>
+      )}
+    </div>
   )
 }
 

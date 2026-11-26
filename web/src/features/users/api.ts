@@ -30,7 +30,6 @@ import type {
   SearchUsersParams,
   UserFormData,
   ManageUserAction,
-  ManageUserQuotaPayload,
   ApiResponse,
 } from './types'
 
@@ -159,16 +158,6 @@ export async function manageUser(
     { id, action },
     securityProofConfig(proofToken)
   )
-  return res.data
-}
-
-/**
- * Adjust user quota atomically (add/subtract/override)
- */
-export async function adjustUserQuota(
-  payload: ManageUserQuotaPayload
-): Promise<ApiResponse<Partial<User>>> {
-  const res = await api.post('/api/user/manage', payload)
   return res.data
 }
 

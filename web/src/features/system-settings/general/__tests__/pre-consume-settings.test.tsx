@@ -41,13 +41,8 @@ function Fixture() {
       <SettingsPageProvider actionsContainer={container}>
         <QuotaSettingsSection
           defaultValues={{
-            QuotaForNewUser: 0,
-            QuotaForInviter: 0,
-            QuotaForInvitee: 0,
-            TopUpLink: '',
             quota_setting: {
               enable_free_model_pre_consume: true,
-              trust_quota_usd: 10,
               pre_consume_multiplier: 1,
             },
           }}
@@ -85,11 +80,6 @@ test.each(['0.5', '1.5', '2.5', '0.0001'])(
     const user = userEvent.setup()
     const input = await renderSettings()
     expect(input).toHaveValue(1)
-    expect(
-      screen.getByRole('spinbutton', {
-        name: 'Wallet pre-consume bypass threshold (USD)',
-      })
-    ).toHaveValue(10)
     await user.clear(input)
     await user.type(input, value)
     await user.tab()
@@ -113,35 +103,6 @@ test.each(['0', '-0.5', ''])(
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
     await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText('Must be greater than 0')).toBeInTheDocument()
-    expect(api.put).not.toHaveBeenCalled()
-  }
-)
-
-test('zero threshold disables bypass and saves as zero', async () => {
-  await renderSettings()
-  const input = screen.getByRole('spinbutton', {
-    name: 'Wallet pre-consume bypass threshold (USD)',
-  })
-  fireEvent.change(input, { target: { value: '0' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
-  await waitFor(() =>
-    expect(api.put).toHaveBeenCalledWith('/api/option/', {
-      key: 'quota_setting.trust_quota_usd',
-      value: 0,
-    })
-  )
-})
-
-test.each(['', '-1'])(
-  'invalid threshold "%s" prevents saving',
-  async (value) => {
-    await renderSettings()
-    const input = screen.getByRole('spinbutton', {
-      name: 'Wallet pre-consume bypass threshold (USD)',
-    })
-    fireEvent.change(input, { target: { value } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
-    await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'))
     expect(api.put).not.toHaveBeenCalled()
   }
 )

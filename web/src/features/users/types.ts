@@ -42,7 +42,7 @@ export const userSchema = z.object({
   wechat_id: z.string().optional(),
   telegram_id: z.string().optional(),
   email: z.string().optional(),
-  quota: z.number(),
+  quota: z.number().optional(),
   used_quota: z.number(),
   request_count: z.number(),
   group: z.string(),
@@ -122,7 +122,6 @@ export interface UserFormData {
   display_name: string
   password?: string
   role?: number // Only used when creating user
-  quota?: number // Only used when updating user
   group?: string // Only used when updating user
   remark?: string // Only used when updating user
   admin_permissions?: AdminPermissionMatrix
@@ -134,7 +133,6 @@ export type ManageUserAction =
   | 'enable'
   | 'disable'
   | 'delete'
-  | 'add_quota'
 
 export type QuotaAdjustMode = 'add' | 'subtract' | 'override'
 

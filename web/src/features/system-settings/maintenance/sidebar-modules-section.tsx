@@ -75,7 +75,7 @@ export function SidebarModulesSection({
     },
     personal: {
       title: t('Personal area'),
-      description: t('Wallet management and personal preferences.'),
+      description: t('Settings & Preferences'),
     },
     admin: {
       title: t('Admin area'),
@@ -107,7 +107,7 @@ export function SidebarModulesSection({
         description: t('Discuss requests and report issues.'),
       },
       team_activity: {
-        title: t('Team Activity'),
+        title: t('Rankings'),
         description: t('View team activity estimates.'),
       },
       detail: {
@@ -136,10 +136,6 @@ export function SidebarModulesSection({
       },
     },
     personal: {
-      topup: {
-        title: t('Wallet'),
-        description: t('Top up balance and view billing history.'),
-      },
       personal: {
         title: t('Profile'),
         description: t('Personal settings and profile management.'),
@@ -173,10 +169,6 @@ export function SidebarModulesSection({
       setting: {
         title: t('System settings'),
         description: t('Advanced platform configuration.'),
-      },
-      subscription: {
-        title: t('Subscription Management'),
-        description: t('Manage subscription plans and pricing.'),
       },
     },
   }

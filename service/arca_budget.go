@@ -23,11 +23,12 @@ type arcaRelayEntitlement struct {
 }
 
 type arcaRequestBudget struct {
-	tracked     bool
-	userID      int
-	requestID   string
-	alias       string
-	entitlement arcaRelayEntitlement
+	tracked       bool
+	userID        int
+	requestID     string
+	alias         string
+	entitlement   arcaRelayEntitlement
+	authorization model.ArcaManagedAuthorization
 }
 
 func loadArcaRelayEntitlement(c *gin.Context, userID int) (arcaRelayEntitlement, error) {
@@ -46,7 +47,11 @@ func loadArcaRelayEntitlement(c *gin.Context, userID int) (arcaRelayEntitlement,
 	if err != nil {
 		return arcaRelayEntitlement{}, err
 	}
-	entitlement := arcaRelayEntitlement{policy: policy, effective: policy.Effective(userID)}
+	effective, err := policy.EffectiveForUser(userID)
+	if err != nil {
+		return arcaRelayEntitlement{}, err
+	}
+	entitlement := arcaRelayEntitlement{policy: policy, effective: effective}
 	if c != nil {
 		c.Set(arcaRelayEntitlementKey, entitlement)
 	}
@@ -67,17 +72,11 @@ func CheckArcaRelayEntitlement(c *gin.Context, alias string) *types.NewAPIError 
 			http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 	}
 	path := c.Request.URL.Path
-	// Realtime and legacy Midjourney can bill without a per-request
-	// BillingSession. A finite user allowance cannot admit those paths.
+	// These legacy transports settle through wallet-specific paths. Require
+	// the managed per-request ledger before dispatching them.
 	if path == "/v1/realtime" || strings.Contains(path, "/mj/") {
-		windows, err := entitlement.policy.Windows(entitlement.effective, "", time.Now())
-		if err != nil {
-			return arcaBudgetAPIError(err)
-		}
-		if len(windows) != 0 || entitlement.effective.Allocation.InternalFunding {
-			return types.NewErrorWithStatusCode(errors.New("request format is unavailable for a bounded organization budget"),
-				types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
-		}
+		return types.NewErrorWithStatusCode(errors.New("request format is unavailable with managed entitlements"),
+			types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 	}
 	return nil
 }
@@ -110,39 +109,31 @@ func reserveArcaRequestBudget(c *gin.Context, info *relaycommon.RelayInfo, quota
 			http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 	}
 	budget := &arcaRequestBudget{
-		userID: info.UserId, requestID: info.RequestId,
+		tracked: true, userID: info.UserId, requestID: info.RequestId,
 		alias: arcaBudgetAlias(entitlement, info.OriginModelName), entitlement: entitlement,
+		authorization: model.ArcaManagedAuthorization{
+			PublicAlias: info.OriginModelName, Unbounded: entitlement.effective.Allocation.Unlimited,
+		},
 	}
 	now := time.Now()
 	windows, err := entitlement.policy.Windows(entitlement.effective, budget.alias, now)
 	if err != nil {
 		return nil, arcaBudgetAPIError(err)
 	}
-	if len(windows) == 0 {
-		// Keep facts for unrelated aliases while the allocation has a
-		// budget. A family membership edit includes earlier usage in its
-		// current window, even when the alias was previously outside it.
+	// Older installations could intentionally fund an allocation with no
+	// configured limits. Preserve that meaning when no named plan was selected.
+	if len(windows) == 0 && entitlement.effective.SubscriptionID == "" && entitlement.effective.Allocation.InternalFunding {
 		allWindows, err := entitlement.policy.Windows(entitlement.effective, "", now)
 		if err != nil {
 			return nil, arcaBudgetAPIError(err)
 		}
-		if len(allWindows) == 0 {
-			if entitlement.effective.Allocation.InternalFunding {
-				return budget, nil
-			}
-			return nil, nil
-		}
+		budget.authorization.Unbounded = len(allWindows) == 0
 	}
-	budget.tracked = true
 	var ctx context.Context = context.Background()
 	if c != nil && c.Request != nil {
 		ctx = c.Request.Context()
 	}
-	reserve := model.ReserveArcaBudget
-	if info.ArcaFreeBudget {
-		reserve = model.ResizeArcaBudget
-	}
-	if err := reserve(ctx, budget.userID, budget.requestID, budget.alias, quota, windows, now); err != nil {
+	if err := model.ReserveArcaManagedBudget(ctx, budget.userID, budget.requestID, budget.alias, quota, windows, now, info.ArcaFreeBudget, budget.authorization); err != nil {
 		return nil, arcaBudgetAPIError(err)
 	}
 	return budget, nil
@@ -157,7 +148,7 @@ func (b *arcaRequestBudget) reserve(quota int) error {
 	if err != nil {
 		return arcaBudgetAPIError(err)
 	}
-	if err := model.ResizeArcaBudget(context.Background(), b.userID, b.requestID, b.alias, quota, windows, now); err != nil {
+	if err := model.ReserveArcaManagedBudget(context.Background(), b.userID, b.requestID, b.alias, quota, windows, now, true, b.authorization); err != nil {
 		return arcaBudgetAPIError(err)
 	}
 	return nil
@@ -181,9 +172,7 @@ func PrepareArcaFreeBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.
 	}
 	if budget != nil {
 		info.ArcaFreeBudget = budget.tracked
-		if budget.entitlement.effective.Allocation.InternalFunding {
-			info.BillingSource = BillingSourceOrganization
-		}
+		info.BillingSource = BillingSourceOrganization
 	}
 	return nil
 }

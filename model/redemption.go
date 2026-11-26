@@ -11,18 +11,19 @@ import (
 )
 
 type Redemption struct {
-	Id           int            `json:"id"`
-	UserId       int            `json:"user_id"`
-	Key          string         `json:"key" gorm:"type:char(32);uniqueIndex"`
-	Status       int            `json:"status" gorm:"default:1"`
-	Name         string         `json:"name" gorm:"index"`
-	Quota        int            `json:"quota" gorm:"default:100"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	RedeemedTime int64          `json:"redeemed_time" gorm:"bigint"`
-	Count        int            `json:"count" gorm:"-:all"` // only for api request
-	UsedUserId   int            `json:"used_user_id"`
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
-	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Id           int                 `json:"id"`
+	UserId       int                 `json:"user_id"`
+	Key          string              `json:"key" gorm:"type:char(32);uniqueIndex"`
+	Status       int                 `json:"status" gorm:"default:1"`
+	Name         string              `json:"name" gorm:"index"`
+	Quota        int                 `json:"quota" gorm:"default:100"`
+	CreatedTime  int64               `json:"created_time" gorm:"bigint"`
+	RedeemedTime int64               `json:"redeemed_time" gorm:"bigint"`
+	Count        int                 `json:"count" gorm:"-:all"` // only for api request
+	UsedUserId   int                 `json:"used_user_id"`
+	DeletedAt    gorm.DeletedAt      `gorm:"index"`
+	Grant        *ArcaUsageGrantSpec `json:"grant,omitempty" gorm:"serializer:json;type:text"`
+	ExpiredTime  int64               `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
@@ -195,6 +196,24 @@ func (redemption *Redemption) Insert() error {
 	var err error
 	err = DB.Create(redemption).Error
 	return err
+}
+
+func (redemption *Redemption) UpdateUnusedGrant() error {
+	result := DB.Model(redemption).Where("status <> ?", common.RedemptionCodeStatusUsed).
+		Select("name", "quota", "expired_time", "grant").Updates(redemption)
+	if result.Error == nil && result.RowsAffected == 0 {
+		return ErrArcaGrantUnavailable
+	}
+	return result.Error
+}
+
+func (redemption *Redemption) UpdateUnusedStatus() error {
+	result := DB.Model(redemption).Where("status <> ?", common.RedemptionCodeStatusUsed).
+		UpdateColumn("status", redemption.Status)
+	if result.Error == nil && result.RowsAffected == 0 {
+		return ErrArcaGrantUnavailable
+	}
+	return result.Error
 }
 
 func (redemption *Redemption) SelectUpdate() error {

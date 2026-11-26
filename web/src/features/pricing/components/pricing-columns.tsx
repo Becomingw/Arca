@@ -44,6 +44,7 @@ export function usePricingColumns(
   options: PricingColumnsOptions = {}
 ): ColumnDef<PricingModel>[] {
   const { t } = useTranslation()
+  const priceLabel = options.usageUnits ? t('Usage rate') : t('Price')
 
   return [
     // Model column
@@ -84,9 +85,9 @@ export function usePricingColumns(
     // Price column
     {
       accessorKey: 'price',
-      meta: { label: t('Price') },
+      meta: { label: priceLabel },
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Price')} />
+        <DataTableColumnHeader column={column} title={priceLabel} />
       ),
       cell: ({ row }) => (
         <ModelPriceCell model={row.original} options={options} />

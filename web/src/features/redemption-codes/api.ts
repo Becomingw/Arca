@@ -54,6 +54,22 @@ export async function searchRedemptions(
   return res.data
 }
 
+export async function getRedemptionScopes(): Promise<{
+  models: string[]
+  families: Record<string, string>
+}> {
+  const { data: result } = await api.get<
+    ApiResponse<{
+      models: string[]
+      families: Record<string, string>
+    }>
+  >('/api/redemption/scopes')
+  if (!result.success || !result.data) {
+    throw new Error(result.message)
+  }
+  return result.data
+}
+
 // Get single redemption code by ID
 export async function getRedemption(
   id: number

@@ -29,7 +29,7 @@ import {
   Info,
   Loader2,
   Route,
-  WalletCards,
+  ChartNoAxesColumn,
 } from 'lucide-react'
 import {
   Fragment,
@@ -84,7 +84,7 @@ import type {
   FlowOverflowMode,
   FlowRole,
 } from '@/features/dashboard/types'
-import { formatQuota } from '@/lib/format'
+import { formatQuotaUnits } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useThemeColor } from '@/lib/theme-color'
@@ -103,7 +103,7 @@ interface FlowChartsProps {
 }
 
 const FLOW_METRIC_OPTIONS = [
-  { value: 'quota', labelKey: 'By quota', icon: WalletCards },
+  { value: 'quota', labelKey: 'By quota', icon: ChartNoAxesColumn },
   { value: 'tokens', labelKey: 'By tokens', icon: Hash },
   { value: 'requests', labelKey: 'By requests', icon: Activity },
 ] as const
@@ -398,7 +398,9 @@ export function FlowCharts(props: FlowChartsProps) {
   const metricLabel = t(FLOW_METRIC_LABEL_KEYS[metric])
   const formatNodeMetricValue = useCallback(
     (value: number) =>
-      metric === 'quota' ? formatQuota(value) : formatFlowMetricNumber(value),
+      metric === 'quota'
+        ? formatQuotaUnits(value)
+        : formatFlowMetricNumber(value),
     [metric]
   )
   // Explicit filters (the chips/dropdown control) narrow the rows that feed the
@@ -461,7 +463,7 @@ export function FlowCharts(props: FlowChartsProps) {
       buildFlowSankeySpec(
         flowData.flow,
         chartTitle,
-        formatQuota,
+        formatQuotaUnits,
         {
           quota: t('Quota'),
           tokens: t('Tokens'),

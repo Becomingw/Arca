@@ -644,9 +644,10 @@ function ModelHeader(props: { model: PricingModel }) {
 
 function PriceSection(props: {
   model: PricingModel
-  priceRate: number
-  usdExchangeRate: number
+  priceRate?: number
+  usdExchangeRate?: number
   tokenUnit: TokenUnit
+  usageUnits?: boolean
   showRechargePrice: boolean
 }) {
   const { t, i18n } = useTranslation()
@@ -654,13 +655,16 @@ function PriceSection(props: {
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
   const baseGroupKey = '_base'
   const baseGroupRatioMap = { [baseGroupKey]: 1 }
-  const currency = useSystemConfigStore((state) => state.config.currency)
+  const currency = useSystemConfigStore((state) =>
+    props.usageUnits ? undefined : state.config.currency
+  )
   const billingTime = useBillingTime(props.model.billing_expr)
   const dynamicSummary = useMemo(
     () =>
       getDynamicPricingSummary(props.model, {
         now: billingTime === undefined ? undefined : new Date(billingTime),
         tokenUnit: props.tokenUnit,
+        usageUnits: props.usageUnits,
         showRechargePrice: props.showRechargePrice,
         priceRate: props.priceRate,
         usdExchangeRate: props.usdExchangeRate,
@@ -671,6 +675,7 @@ function PriceSection(props: {
     [
       props.model,
       props.tokenUnit,
+      props.usageUnits,
       props.showRechargePrice,
       props.priceRate,
       props.usdExchangeRate,
@@ -721,7 +726,9 @@ function PriceSection(props: {
     if (dynamicSummary.isSpecialExpression) {
       return (
         <section>
-          <SectionTitle>{t('Base Price')}</SectionTitle>
+          <SectionTitle>
+            {props.usageUnits ? t('Base usage rate') : t('Base Price')}
+          </SectionTitle>
           <div className='rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-500/20 dark:bg-amber-500/10'>
             <div className='text-sm font-medium text-amber-800 dark:text-amber-200'>
               {t('Special billing expression')}
@@ -749,7 +756,9 @@ function PriceSection(props: {
 
     return (
       <section>
-        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <SectionTitle>
+          {props.usageUnits ? t('Base usage rate') : t('Base Price')}
+        </SectionTitle>
         {dynamicSummary.providerCount && (
           <p className='text-muted-foreground mb-2 text-xs'>
             {t('{{count}} providers', { count: dynamicSummary.providerCount })}
@@ -838,7 +847,9 @@ function PriceSection(props: {
   if (isUnconfiguredTaskUsageModel(props.model)) {
     return (
       <section>
-        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <SectionTitle>
+          {props.usageUnits ? t('Base usage rate') : t('Base Price')}
+        </SectionTitle>
         <UnconfiguredTaskPricingNotice model={props.model} />
       </section>
     )
@@ -847,7 +858,9 @@ function PriceSection(props: {
   if (!isTokenBased) {
     return (
       <section>
-        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <SectionTitle>
+          {props.usageUnits ? t('Base usage rate') : t('Base Price')}
+        </SectionTitle>
         <div className='flex items-baseline justify-between'>
           <span className='text-muted-foreground text-sm'>
             {t('Per request')}
@@ -859,7 +872,8 @@ function PriceSection(props: {
               props.showRechargePrice,
               props.priceRate,
               props.usdExchangeRate,
-              baseGroupRatioMap
+              baseGroupRatioMap,
+              props.usageUnits ? 'usage' : 'currency'
             )}
           </span>
         </div>
@@ -878,7 +892,8 @@ function PriceSection(props: {
         props.showRechargePrice,
         props.priceRate,
         props.usdExchangeRate,
-        baseGroupRatioMap
+        baseGroupRatioMap,
+        props.usageUnits ? 'usage' : 'currency'
       )}
       <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
         / {tokenUnitLabel}
@@ -888,7 +903,9 @@ function PriceSection(props: {
 
   return (
     <section>
-      <SectionTitle>{t('Base Price')}</SectionTitle>
+      <SectionTitle>
+        {props.usageUnits ? t('Base usage rate') : t('Base Price')}
+      </SectionTitle>
       <div className='grid grid-cols-2 gap-2'>
         {primaryPriceTypes.map((item) => (
           <div key={item.type} className='bg-muted/20 rounded-lg border p-3'>
@@ -1005,9 +1022,10 @@ type GroupPricingSectionProps = {
   groupRatio: Record<string, number>
   usableGroup: Record<string, { desc: string; ratio: number }>
   autoGroups: string[]
-  priceRate: number
-  usdExchangeRate: number
+  priceRate?: number
+  usdExchangeRate?: number
   tokenUnit: TokenUnit
+  usageUnits?: boolean
   showRechargePrice?: boolean
 }
 
@@ -1023,7 +1041,9 @@ function GroupPricingSection(props: GroupPricingSectionProps) {
   const ordinary = props.model.ordinary_pricing
   return (
     <section>
-      <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+      <SectionTitle>
+        {props.usageUnits ? t('Usage rates by group') : t('Pricing by Group')}
+      </SectionTitle>
       <Tabs
         key={props.model.model_name}
         defaultValue={ordinary ? ORDINARY_PRICING_TAB : variants[0].plugin_key}
@@ -1034,7 +1054,7 @@ function GroupPricingSection(props: GroupPricingSectionProps) {
         >
           {ordinary && (
             <TabsTrigger value={ORDINARY_PRICING_TAB}>
-              {t('Default price')}
+              {props.usageUnits ? t('Default usage rate') : t('Default price')}
             </TabsTrigger>
           )}
           {variants.map((variant) => (
@@ -1127,7 +1147,11 @@ function ProviderGroupPricingSection(
     return (
       <section>
         {!props.hideTitle && (
-          <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+          <SectionTitle>
+            {props.usageUnits
+              ? t('Usage rates by group')
+              : t('Pricing by Group')}
+          </SectionTitle>
         )}
         <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
         <p className='text-muted-foreground text-sm'>
@@ -1159,7 +1183,11 @@ function ProviderGroupPricingSection(
       return (
         <section>
           {!props.hideTitle && (
-            <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+            <SectionTitle>
+              {props.usageUnits
+                ? t('Usage rates by group')
+                : t('Pricing by Group')}
+            </SectionTitle>
           )}
           <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
           <div className='rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-500/20 dark:bg-amber-500/10'>
@@ -1187,6 +1215,18 @@ function ProviderGroupPricingSection(
       )
     }
 
+    const hasTaskOrRequestRates = dynamicTiers.some(
+      (tier) => 'unitPrices' in tier || tier.billingUnit === 'request'
+    )
+    const taskUnitCaption = props.usageUnits
+      ? t('Rates are in usage units')
+      : t('Prices shown per usage unit')
+    const tokenUnitCaption = props.usageUnits
+      ? t('Usage units per {{unit}} tokens', { unit: tokenUnitLabel })
+      : t('Prices shown per {{unit}} tokens', { unit: tokenUnitLabel })
+    const usageUnitCaption = hasTaskOrRequestRates
+      ? taskUnitCaption
+      : tokenUnitCaption
     const usageExampleRows = evaluateTaskUsageExamples(
       props.model.billing_expr,
       props.model.billing_usage_schema,
@@ -1195,6 +1235,7 @@ function ProviderGroupPricingSection(
     const priceFields = getDynamicPriceFields(dynamicTiers, {
       modelName: props.model.model_name,
       tokenUnit: props.tokenUnit,
+      usageUnits: props.usageUnits,
       showRechargePrice,
       priceRate: props.priceRate,
       usdExchangeRate: props.usdExchangeRate,
@@ -1209,6 +1250,7 @@ function ProviderGroupPricingSection(
           getDynamicFormattedPricesByTier(dynamicTiers, {
             modelName: props.model.model_name,
             tokenUnit: props.tokenUnit,
+            usageUnits: props.usageUnits,
             showRechargePrice,
             priceRate: props.priceRate,
             usdExchangeRate: props.usdExchangeRate,
@@ -1222,7 +1264,11 @@ function ProviderGroupPricingSection(
     return (
       <section>
         {!props.hideTitle && (
-          <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+          <SectionTitle>
+            {props.usageUnits
+              ? t('Usage rates by group')
+              : t('Pricing by Group')}
+          </SectionTitle>
         )}
         <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
         <div className='space-y-3'>
@@ -1325,7 +1371,9 @@ function ProviderGroupPricingSection(
                 {usageExampleRows.length > 0 ? (
                   <div className='border-t'>
                     <div className='text-muted-foreground px-3 pt-2 text-[10px] font-medium tracking-wider uppercase'>
-                      {t('Price examples')}
+                      {props.usageUnits
+                        ? t('Usage examples')
+                        : t('Price examples')}
                     </div>
                     <StaticDataTable
                       className='rounded-none border-0'
@@ -1343,12 +1391,15 @@ function ProviderGroupPricingSection(
                         },
                         {
                           id: 'price',
-                          header: t('Example price'),
+                          header: props.usageUnits
+                            ? t('Example usage')
+                            : t('Example price'),
                           className: `${thClass} text-right`,
                           cellClassName: 'py-2.5 text-right font-mono',
                           cell: (row) =>
                             `≈ ${formatTaskUsageUnitPrice(row.total, {
                               tokenUnit: props.tokenUnit,
+                              usageUnits: props.usageUnits,
                               showRechargePrice,
                               priceRate: props.priceRate,
                               usdExchangeRate: props.usdExchangeRate,
@@ -1358,7 +1409,9 @@ function ProviderGroupPricingSection(
                       ]}
                     />
                     <p className='text-muted-foreground/40 px-3 pb-2 text-[10px]'>
-                      {t('Approximate prices for common specs.')}
+                      {props.usageUnits
+                        ? t('Estimated usage units for common specs.')
+                        : t('Approximate prices for common specs.')}
                     </p>
                   </div>
                 ) : null}
@@ -1366,11 +1419,7 @@ function ProviderGroupPricingSection(
             )
           })}
           <p className='text-muted-foreground/40 mt-1.5 text-[10px]'>
-            {dynamicTiers.some(
-              (tier) => 'unitPrices' in tier || tier.billingUnit === 'request'
-            )
-              ? t('Prices shown per usage unit')
-              : t('Prices shown per {{unit}} tokens', { unit: tokenUnitLabel })}
+            {usageUnitCaption}
           </p>
         </div>
       </section>
@@ -1381,7 +1430,11 @@ function ProviderGroupPricingSection(
     return (
       <section>
         {!props.hideTitle && (
-          <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+          <SectionTitle>
+            {props.usageUnits
+              ? t('Usage rates by group')
+              : t('Pricing by Group')}
+          </SectionTitle>
         )}
         <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
         <UnconfiguredTaskPricingNotice model={props.model} />
@@ -1398,7 +1451,8 @@ function ProviderGroupPricingSection(
       showRechargePrice,
       props.priceRate,
       props.usdExchangeRate,
-      props.groupRatio
+      props.groupRatio,
+      props.usageUnits ? 'usage' : 'currency'
     )
   const renderFixedGroupPrice = (group: string) =>
     formatFixedPrice(
@@ -1407,12 +1461,17 @@ function ProviderGroupPricingSection(
       showRechargePrice,
       props.priceRate,
       props.usdExchangeRate,
-      props.groupRatio
+      props.groupRatio,
+      props.usageUnits ? 'usage' : 'currency'
     )
 
   return (
     <section>
-      {!props.hideTitle && <SectionTitle>{t('Pricing by Group')}</SectionTitle>}
+      {!props.hideTitle && (
+        <SectionTitle>
+          {props.usageUnits ? t('Usage rates by group') : t('Pricing by Group')}
+        </SectionTitle>
+      )}
       <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
       <StaticDataTable
         className='-mx-4 rounded-none border-0 sm:mx-0'
@@ -1462,7 +1521,7 @@ function ProviderGroupPricingSection(
             : [
                 {
                   id: 'price',
-                  header: t('Price'),
+                  header: props.usageUnits ? t('Usage rate') : t('Price'),
                   className: `${thClass} text-right`,
                   cellClassName: 'py-2.5 text-right font-mono',
                   cell: renderFixedGroupPrice,
@@ -1473,7 +1532,9 @@ function ProviderGroupPricingSection(
       <div className='-mx-4 sm:mx-0'>
         {isTokenBased && (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
-            {t('Prices shown per {{unit}} tokens', { unit: tokenUnitLabel })}
+            {props.usageUnits
+              ? t('Usage units per {{unit}} tokens', { unit: tokenUnitLabel })
+              : t('Prices shown per {{unit}} tokens', { unit: tokenUnitLabel })}
           </p>
         )}
       </div>
@@ -1499,9 +1560,10 @@ export interface ModelDetailsContentProps {
   usableGroup: Record<string, { desc: string; ratio: number }>
   endpointMap: Record<string, { path?: string; method?: string }>
   autoGroups: string[]
-  priceRate: number
-  usdExchangeRate: number
+  priceRate?: number
+  usdExchangeRate?: number
   tokenUnit: TokenUnit
+  usageUnits?: boolean
   showRechargePrice?: boolean
 }
 
@@ -1550,7 +1612,14 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
           <OverviewSummaryGrid model={props.model} />
 
           <section className='bg-card/60 space-y-5 rounded-xl border p-4 shadow-sm'>
-            <SectionTitle>{t('Pricing')}</SectionTitle>
+            <SectionTitle>
+              {props.usageUnits ? t('Model usage rates') : t('Pricing')}
+            </SectionTitle>
+            {props.usageUnits && (
+              <p className='text-muted-foreground text-xs'>
+                {t('Rates are in usage units')}
+              </p>
+            )}
             {showBasePrices && (
               <PriceSection
                 model={baseModel}
@@ -1558,6 +1627,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
                 usdExchangeRate={props.usdExchangeRate}
                 tokenUnit={props.tokenUnit}
                 showRechargePrice={showRechargePrice}
+                usageUnits={props.usageUnits}
               />
             )}
             {isDynamic && !simpleTaskPricing && (
@@ -1567,6 +1637,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
                 usageSchema={baseModel.billing_usage_schema}
                 taskPriceOptions={{
                   showRechargePrice,
+                  usageUnits: props.usageUnits,
                   priceRate: props.priceRate,
                   usdExchangeRate: props.usdExchangeRate,
                 }}
@@ -1581,6 +1652,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
               usdExchangeRate={props.usdExchangeRate}
               tokenUnit={props.tokenUnit}
               showRechargePrice={showRechargePrice}
+              usageUnits={props.usageUnits}
             />
           </section>
 
@@ -1648,8 +1720,6 @@ export function ModelDetails() {
     endpointMap,
     autoGroups,
     isLoading,
-    priceRate,
-    usdExchangeRate,
   } = usePricingData()
 
   const tokenUnit: TokenUnit =
@@ -1725,10 +1795,8 @@ export function ModelDetails() {
           groupRatio={groupRatio || {}}
           usableGroup={usableGroup || {}}
           autoGroups={autoGroups || []}
-          priceRate={priceRate ?? 1}
-          usdExchangeRate={usdExchangeRate ?? 1}
           tokenUnit={tokenUnit}
-          showRechargePrice={search.rechargePrice ?? false}
+          usageUnits
           endpointMap={
             (endpointMap as Record<
               string,

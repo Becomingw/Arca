@@ -43,7 +43,6 @@ const profile: UserProfile = {
 }
 const settings = {
   notify_type: 'webhook',
-  quota_warning_threshold: 1200,
   notification_email: '',
   webhook_url: 'https://example.com/notify',
   webhook_secret: 'webhook-secret',
@@ -93,7 +92,6 @@ describe('user settings saves across profile and security', () => {
     expect(put.mock.calls[0][0]).toBe('/api/user/setting')
     expect(sentBody(put)).toEqual({
       notify_type: 'email',
-      quota_warning_threshold: 0,
       notification_email: '',
       webhook_url: '',
       webhook_secret: '',
@@ -120,11 +118,11 @@ describe('user settings saves across profile and security', () => {
       return { data: { success: true } }
     })
     await updateUserSettings({ record_ip_log: false })
-    await updateUserSettings({ quota_warning_threshold: 2500 })
+    await updateUserSettings({ webhook_url: 'https://example.com/updated' })
     await updateUserSettings({ record_ip_log: true })
     expect(saved).toEqual({
       ...settings,
-      quota_warning_threshold: 2500,
+      webhook_url: 'https://example.com/updated',
       record_ip_log: true,
     })
   })
@@ -181,22 +179,19 @@ describe('user settings saves across profile and security', () => {
       <NotificationTab
         profile={{ ...profile, setting: JSON.stringify(settings) }}
         onUpdate={onUpdate}
-        quotaRemindEnabled
-        quotaRemindThreshold={1000}
       />
     )
     expect(
       screen.queryByRole('switch', { name: 'Record IP Address' })
     ).not.toBeInTheDocument()
-    fireEvent.change(
-      screen.getByRole('spinbutton', { name: 'Reminder threshold (USD)' }),
-      { target: { value: '0.0054' } }
-    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'Webhook URL' }), {
+      target: { value: 'https://example.com/updated' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalled())
     expect(put).toHaveBeenCalledWith('/api/user/setting', {
       ...settings,
-      quota_warning_threshold: 2700,
+      webhook_url: 'https://example.com/updated',
       record_ip_log: false,
     })
   })
@@ -205,16 +200,13 @@ describe('user settings saves across profile and security', () => {
 describe('notifications a user receives', () => {
   function renderNotificationTab(
     role: number,
-    setting: Record<string, unknown>,
-    quotaRemindEnabled = true
+    setting: Record<string, unknown>
   ) {
     const onUpdate = vi.fn()
     render(
       <NotificationTab
         profile={{ ...profile, role, setting: JSON.stringify(setting) }}
         onUpdate={onUpdate}
-        quotaRemindEnabled={quotaRemindEnabled}
-        quotaRemindThreshold={1000}
       />
     )
     return onUpdate
@@ -239,88 +231,24 @@ describe('notifications a user receives', () => {
     { name: 'user', role: ROLE.USER, channel: undefined },
     { name: 'admin', role: ROLE.ADMIN, channel: false },
     { name: 'root', role: ROLE.SUPER_ADMIN, channel: true },
-  ])(
-    'a $name who never chose sees the reminder on and the channel switch as $channel',
-    (row) => {
-      renderNotificationTab(row.role, { notify_type: 'email' })
-      expect(
-        screen.getByRole('switch', { name: 'Low balance reminder' })
-      ).toBeChecked()
-      const channel = screen.queryByRole('switch', {
-        name: 'Channel notifications',
-      })
-      const upstream = screen.queryByRole('switch', {
-        name: 'Upstream Model Updates',
-      })
-      if (row.channel === undefined) {
-        expect(channel).not.toBeInTheDocument()
-        expect(upstream).not.toBeInTheDocument()
-        return
-      }
-      expect(channel?.getAttribute('aria-checked')).toBe(String(row.channel))
-      expect(upstream).not.toBeChecked()
-    }
-  )
-
-  it('a user on a site with reminders off sees one line instead of notification settings', () => {
-    renderNotificationTab(ROLE.USER, { notify_type: 'email' }, false)
-    expect(
-      screen.getByText('No notifications are available to you right now')
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Notification Method')).not.toBeInTheDocument()
+  ])('a $name who never chose sees the channel switch as $channel', (row) => {
+    renderNotificationTab(row.role, { notify_type: 'email' })
     expect(
       screen.queryByRole('switch', { name: 'Low balance reminder' })
     ).not.toBeInTheDocument()
-  })
-
-  it('an admin on a site with reminders off keeps only the administrator notifications', () => {
-    renderNotificationTab(ROLE.ADMIN, { notify_type: 'email' }, false)
-    expect(
-      screen.queryByRole('switch', { name: 'Low balance reminder' })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('switch', { name: 'Channel notifications' })
-    ).toBeInTheDocument()
-    expect(screen.getByText('Notification Method')).toBeInTheDocument()
-  })
-
-  it('an empty threshold shows the site default and saves as the site default', async () => {
-    const put = mockSave(ROLE.USER, { notify_type: 'email' })
-    const onUpdate = renderNotificationTab(ROLE.USER, { notify_type: 'email' })
-    const threshold = screen.getByRole('spinbutton', {
-      name: 'Reminder threshold (USD)',
+    const channel = screen.queryByRole('switch', {
+      name: 'Channel notifications',
     })
-    expect(threshold).toHaveValue(null)
-    expect(threshold).toHaveAttribute('placeholder', '0.002')
-    expect(
-      screen.getByText('Leave empty to use the site default ($0.002)')
-    ).toBeInTheDocument()
-    await save(onUpdate)
-    expect(sentBody(put)).toMatchObject({ quota_warning_threshold: 0 })
-  })
-
-  it('an untouched threshold is saved as stored, in quota units', async () => {
-    const setting = { notify_type: 'email', quota_warning_threshold: 1234 }
-    const put = mockSave(ROLE.USER, setting)
-    const onUpdate = renderNotificationTab(ROLE.USER, setting)
-    expect(
-      screen.getByRole('spinbutton', { name: 'Reminder threshold (USD)' })
-    ).toHaveValue(0.002468)
-    await save(onUpdate)
-    expect(sentBody(put)).toMatchObject({ quota_warning_threshold: 1234 })
-  })
-
-  it('turning the reminder off hides its threshold and saves the switch', async () => {
-    const put = mockSave(ROLE.USER, { notify_type: 'email' })
-    const onUpdate = renderNotificationTab(ROLE.USER, { notify_type: 'email' })
-    fireEvent.click(
-      screen.getByRole('switch', { name: 'Low balance reminder' })
-    )
-    expect(
-      screen.queryByRole('spinbutton', { name: 'Reminder threshold (USD)' })
-    ).not.toBeInTheDocument()
-    await save(onUpdate)
-    expect(sentBody(put)).toMatchObject({ quota_warning_enabled: false })
+    const upstream = screen.queryByRole('switch', {
+      name: 'Upstream Model Updates',
+    })
+    if (row.channel === undefined) {
+      expect(channel).not.toBeInTheDocument()
+      expect(upstream).not.toBeInTheDocument()
+      return
+    }
+    expect(channel?.getAttribute('aria-checked')).toBe(String(row.channel))
+    expect(upstream).not.toBeChecked()
   })
 
   it('switches root never touched stay unset when it saves', async () => {

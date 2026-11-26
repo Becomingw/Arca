@@ -8,18 +8,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -336,6 +333,32 @@ func Register(c *gin.Context) {
 	return
 }
 
+func adminUserDashboardList(users []*model.User) []gin.H {
+	data := make([]gin.H, 0, len(users))
+	for _, user := range users {
+		data = append(data, adminUserDashboardData(user))
+	}
+	return data
+}
+
+func adminUserDashboardData(user *model.User) gin.H {
+	data := gin.H{
+		"id": user.Id, "username": user.Username, "display_name": user.DisplayName,
+		"email": user.Email, "status": user.Status, "role": user.Role, "group": user.Group,
+		"used_quota": user.UsedQuota, "request_count": user.RequestCount,
+		"github_id": user.GitHubId, "discord_id": user.DiscordId, "oidc_id": user.OidcId,
+		"wechat_id": user.WeChatId, "telegram_id": user.TelegramId, "linux_do_id": user.LinuxDOId,
+		"created_at": user.CreatedAt, "last_login_at": user.LastLoginAt, "DeletedAt": user.DeletedAt,
+	}
+	if user.Remark != "" {
+		data["remark"] = user.Remark
+	}
+	if user.AdminPermissions != nil {
+		data["admin_permissions"] = user.AdminPermissions
+	}
+	return data
+}
+
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
@@ -346,7 +369,7 @@ func GetAllUsers(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(users)
+	pageInfo.SetItems(adminUserDashboardList(users))
 
 	common.ApiSuccess(c, pageInfo)
 	return
@@ -376,7 +399,7 @@ func SearchUsers(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(users)
+	pageInfo.SetItems(adminUserDashboardList(users))
 	common.ApiSuccess(c, pageInfo)
 	return
 }
@@ -405,62 +428,7 @@ func GetUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
-	})
-	return
-}
-
-type TransferAffQuotaRequest struct {
-	Quota int `json:"quota" binding:"required"`
-}
-
-func TransferAffQuota(c *gin.Context) {
-	if !requirePaymentCompliance(c) {
-		return
-	}
-
-	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	tran := TransferAffQuotaRequest{}
-	if err := c.ShouldBindJSON(&tran); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	err = user.TransferAffQuotaToQuota(tran.Quota)
-	var message *common.Message
-	if errors.As(err, &message) {
-		common.ApiError(c, err)
-		return
-	}
-	if err != nil {
-		common.ApiErrorT(c, "Transfer failed {{error}}", map[string]any{"error": err.Error()})
-		return
-	}
-	common.ApiSuccessT(c, "Transfer successful", nil)
-}
-
-func GetAffCode(c *gin.Context) {
-	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if user.AffCode == "" {
-		user.AffCode = common.GetRandomString(4)
-		if err := user.Update(false); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    user.AffCode,
+		"data":    adminUserDashboardData(user),
 	})
 	return
 }
@@ -497,32 +465,25 @@ func buildSelfUserData(user *model.User) map[string]any {
 	permissions := calculateUserPermissions(user.Role)
 	permissions["admin_permissions"] = authz.Capabilities(user.Id, user.Role)
 	return map[string]any{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"has_password":      user.HasPassword,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,
+		"id":              user.Id,
+		"username":        user.Username,
+		"display_name":    user.DisplayName,
+		"has_password":    user.HasPassword,
+		"role":            user.Role,
+		"status":          user.Status,
+		"email":           user.Email,
+		"github_id":       user.GitHubId,
+		"discord_id":      user.DiscordId,
+		"oidc_id":         user.OidcId,
+		"wechat_id":       user.WeChatId,
+		"telegram_id":     user.TelegramId,
+		"group":           user.Group,
+		"used_quota":      user.UsedQuota,
+		"request_count":   user.RequestCount,
+		"linux_do_id":     user.LinuxDOId,
+		"setting":         user.Setting,
+		"sidebar_modules": userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":     permissions,
 	}
 }
 
@@ -1105,7 +1066,7 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 	if req.Action == "add_quota" {
-		manageUserQuota(c, req)
+		common.ApiErrorStatus(c, http.StatusGone, common.NewMessage("This action is no longer available"))
 		return
 	}
 	user := model.User{
@@ -1245,99 +1206,19 @@ func ManageUser(c *gin.Context) {
 	return
 }
 
-type topUpRequest struct {
-	Key string `json:"key"`
-}
-
-var topUpLocks sync.Map
-var topUpCreateLock sync.Mutex
-
-type topUpTryLock struct {
-	ch chan struct{}
-}
-
-func newTopUpTryLock() *topUpTryLock {
-	return &topUpTryLock{ch: make(chan struct{}, 1)}
-}
-
-func (l *topUpTryLock) TryLock() bool {
-	select {
-	case l.ch <- struct{}{}:
-		return true
-	default:
-		return false
-	}
-}
-
-func (l *topUpTryLock) Unlock() {
-	select {
-	case <-l.ch:
-	default:
-	}
-}
-
-func getTopUpLock(userID int) *topUpTryLock {
-	if v, ok := topUpLocks.Load(userID); ok {
-		return v.(*topUpTryLock)
-	}
-	topUpCreateLock.Lock()
-	defer topUpCreateLock.Unlock()
-	if v, ok := topUpLocks.Load(userID); ok {
-		return v.(*topUpTryLock)
-	}
-	l := newTopUpTryLock()
-	topUpLocks.Store(userID, l)
-	return l
-}
-
-func TopUp(c *gin.Context) {
-	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiErrorT(c, "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
-		return
-	}
-
-	id := c.GetInt("id")
-	lock := getTopUpLock(id)
-	if !lock.TryLock() {
-		common.ApiErrorT(c, "Top-up is processing, please try again later")
-		return
-	}
-	defer lock.Unlock()
-	req := topUpRequest{}
-	err := c.ShouldBindJSON(&req)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	quota, err := model.Redeem(req.Key, id)
-	if err != nil {
-		// 不向用户暴露兑换失败的细分原因，避免攻击者根据错误类型判断兑换码状态。
-		common.ApiErrorT(c, "Redemption failed, please try again later")
-		logger.LogError(c, common.LogText("failed to redeem key %s for user %d: %s", req.Key, id, err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    quota,
-	})
-}
-
 type UpdateUserSettingRequest struct {
-	QuotaWarningType                 string  `json:"notify_type"`
-	QuotaWarningThreshold            float64 `json:"quota_warning_threshold"`
-	QuotaWarningEnabled              *bool   `json:"quota_warning_enabled,omitempty"`
-	WebhookUrl                       string  `json:"webhook_url,omitempty"`
-	WebhookSecret                    string  `json:"webhook_secret,omitempty"`
-	NotificationEmail                string  `json:"notification_email,omitempty"`
-	BarkUrl                          string  `json:"bark_url,omitempty"`
-	GotifyUrl                        string  `json:"gotify_url,omitempty"`
-	GotifyToken                      string  `json:"gotify_token,omitempty"`
-	GotifyPriority                   int     `json:"gotify_priority,omitempty"`
-	UpstreamModelUpdateNotifyEnabled *bool   `json:"upstream_model_update_notify_enabled,omitempty"`
-	ChannelNotifyEnabled             *bool   `json:"channel_notify_enabled,omitempty"`
-	AcceptUnsetModelRatioModel       bool    `json:"accept_unset_model_ratio_model"`
-	RecordIpLog                      bool    `json:"record_ip_log"`
+	QuotaWarningType                 string `json:"notify_type"`
+	WebhookUrl                       string `json:"webhook_url,omitempty"`
+	WebhookSecret                    string `json:"webhook_secret,omitempty"`
+	NotificationEmail                string `json:"notification_email,omitempty"`
+	BarkUrl                          string `json:"bark_url,omitempty"`
+	GotifyUrl                        string `json:"gotify_url,omitempty"`
+	GotifyToken                      string `json:"gotify_token,omitempty"`
+	GotifyPriority                   int    `json:"gotify_priority,omitempty"`
+	UpstreamModelUpdateNotifyEnabled *bool  `json:"upstream_model_update_notify_enabled,omitempty"`
+	ChannelNotifyEnabled             *bool  `json:"channel_notify_enabled,omitempty"`
+	AcceptUnsetModelRatioModel       bool   `json:"accept_unset_model_ratio_model"`
+	RecordIpLog                      bool   `json:"record_ip_log"`
 }
 
 func UpdateUserSetting(c *gin.Context) {
@@ -1350,12 +1231,6 @@ func UpdateUserSetting(c *gin.Context) {
 	// 验证预警类型
 	if req.QuotaWarningType != dto.NotifyTypeEmail && req.QuotaWarningType != dto.NotifyTypeWebhook && req.QuotaWarningType != dto.NotifyTypeBark && req.QuotaWarningType != dto.NotifyTypeGotify {
 		common.ApiErrorT(c, "Invalid warning type")
-		return
-	}
-
-	// 验证预警阈值，0 表示使用系统默认阈值
-	if req.QuotaWarningThreshold < 0 {
-		common.ApiErrorT(c, "Reminder threshold cannot be negative")
 		return
 	}
 
@@ -1431,12 +1306,8 @@ func UpdateUserSetting(c *gin.Context) {
 	// 请求未携带的开关也保持原值
 	settings := user.GetSetting()
 	settings.NotifyType = req.QuotaWarningType
-	settings.QuotaWarningThreshold = req.QuotaWarningThreshold
 	settings.AcceptUnsetRatioModel = req.AcceptUnsetModelRatioModel
 	settings.RecordIpLog = req.RecordIpLog
-	if req.QuotaWarningEnabled != nil {
-		settings.QuotaWarningEnabled = req.QuotaWarningEnabled
-	}
 	if user.Role >= common.RoleAdminUser {
 		if req.UpstreamModelUpdateNotifyEnabled != nil {
 			settings.UpstreamModelUpdateNotifyEnabled = *req.UpstreamModelUpdateNotifyEnabled

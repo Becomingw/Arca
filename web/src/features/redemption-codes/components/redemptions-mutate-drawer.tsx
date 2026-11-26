@@ -50,16 +50,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  formatQuotaWithCurrency,
-  getCurrencyDisplay,
-  getCurrencyLabel,
-} from '@/lib/currency'
-import {
-  formatQuota,
-  getEditableQuotaStep,
-  parseQuotaFromDollars,
-} from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
 import { handleServerError } from '@/lib/handle-server-error'
 import { addTimeToDate } from '@/lib/time'
 
@@ -72,7 +63,9 @@ import {
   transformFormDataToPayload,
   transformRedemptionToFormDefaults,
 } from '../lib'
+import { formatUsageUnits, quotaToUsageUnits } from '../lib/redemption-form'
 import type { Redemption } from '../types'
+import { RedemptionGrantFields } from './redemption-grant-fields'
 import {
   RedemptionsExportDialog,
   type RedemptionExportData,
@@ -90,7 +83,8 @@ export function RedemptionsMutateDrawer({
   onOpenChange,
   currentRow,
 }: RedemptionsMutateDrawerProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const isUpdate = !!currentRow
   const redemptionId = currentRow?.id
   const { triggerRefresh } = useRedemptions()
@@ -177,7 +171,7 @@ export function RedemptionsMutateDrawer({
       const basePayload = transformFormDataToPayload(data)
 
       if (isUpdate && currentRow && loadedRedemption) {
-        const quota = form.getFieldState('quota_dollars').isDirty
+        const quota = form.getFieldState('units').isDirty
           ? basePayload.quota
           : loadedRedemption.quota
         const result = await updateRedemption({
@@ -208,9 +202,10 @@ export function RedemptionsMutateDrawer({
             setCreatedCodes({
               keys: result.data,
               name: basePayload.name,
-              quota: formatQuotaWithCurrency(basePayload.quota, {
-                abbreviate: false,
-              }),
+              quota: formatUsageUnits(
+                quotaToUsageUnits(basePayload.quota),
+                locale
+              ),
             })
           }
           onOpenChange(false)
@@ -230,8 +225,7 @@ export function RedemptionsMutateDrawer({
     if (!isUpdate) {
       const name = form.getValues('name')
       if (!name?.trim()) {
-        const quota = parseQuotaFromDollars(form.getValues('quota_dollars'))
-        form.setValue('name', formatQuota(quota), { shouldValidate: true })
+        form.setValue('name', t('Usage grant'), { shouldValidate: true })
       }
     }
 
@@ -243,14 +237,6 @@ export function RedemptionsMutateDrawer({
     form.setValue('expired_time', newDate ?? null)
   }
 
-  const { meta: currencyMeta } = getCurrencyDisplay()
-  const currencyLabel = getCurrencyLabel()
-  const tokensOnly = currencyMeta.kind === 'tokens'
-  const quotaStep = getEditableQuotaStep()
-  const quotaLabel = t('Quota ({{currency}})', { currency: currencyLabel })
-  const quotaPlaceholder = tokensOnly
-    ? t('Enter quota in tokens')
-    : t('Enter quota in {{currency}}', { currency: currencyLabel })
   let submitButtonLabel = t('Save changes')
   if (isLoadingRedemption) {
     submitButtonLabel = t('Loading...')
@@ -310,16 +296,17 @@ export function RedemptionsMutateDrawer({
 
                   <FormField
                     control={form.control}
-                    name='quota_dollars'
+                    name='units'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{quotaLabel}</FormLabel>
+                        <FormLabel>{t('Usage units')}</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             type='number'
-                            step={quotaStep}
-                            placeholder={quotaPlaceholder}
+                            step='any'
+                            min='0'
+                            placeholder={t('Enter usage units')}
                             onChange={(e) =>
                               field.onChange(
                                 Number.parseFloat(e.target.value) || 0
@@ -328,11 +315,9 @@ export function RedemptionsMutateDrawer({
                           />
                         </FormControl>
                         <FormDescription>
-                          {tokensOnly
-                            ? t('Enter the quota amount in tokens')
-                            : t('Enter the quota amount in {{currency}}', {
-                                currency: currencyLabel,
-                              })}
+                          {t(
+                            'Each code provides this amount of additional usage.'
+                          )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -344,7 +329,7 @@ export function RedemptionsMutateDrawer({
                     name='expired_time'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t('Expiration Time')}</FormLabel>
+                        <FormLabel>{t('Code redemption deadline')}</FormLabel>
                         <div className='flex flex-col gap-2'>
                           <FormControl>
                             <DateTimePicker
@@ -389,7 +374,9 @@ export function RedemptionsMutateDrawer({
                           </div>
                         </div>
                         <FormDescription>
-                          {t('Leave empty for never expires')}
+                          {t(
+                            'Controls when the code can be redeemed. Grant validity is configured separately.'
+                          )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -428,6 +415,7 @@ export function RedemptionsMutateDrawer({
                     />
                   )}
                 </SideDrawerSection>
+                <RedemptionGrantFields control={form.control} />
               </fieldset>
             </form>
           </Form>

@@ -96,7 +96,7 @@ export function SidebarModulesCard() {
         },
         {
           key: 'team_activity',
-          title: t('Team Activity'),
+          title: t('Rankings'),
           description: t('View team activity estimates.'),
         },
         {
@@ -136,11 +136,6 @@ export function SidebarModulesCard() {
       title: t('Personal Center Area'),
       description: t('User personal functions'),
       modules: [
-        {
-          key: 'topup',
-          title: t('Wallet Management'),
-          description: t('Balance and top-up management'),
-        },
         {
           key: 'personal',
           title: t('Personal Settings'),
