@@ -56,6 +56,9 @@ import type {
 } from '../types'
 import { ChatPresetsItem } from './chat-presets-item'
 
+const navButtonClass =
+  'rounded-lg active:bg-accent active:text-foreground data-active:bg-overview-accent-1/12 data-active:text-foreground data-active:hover:bg-overview-accent-1/16 data-active:hover:text-foreground'
+
 /**
  * Sidebar navigation group component
  * Renders a group of navigation items, supporting regular links and collapsible submenus
@@ -65,8 +68,8 @@ export function NavGroup({ title, items }: NavGroupProps) {
   const href = useLocation({ select: (location) => location.href })
 
   return (
-    <SidebarGroup className='px-2 py-1'>
-      <SidebarGroupLabel className='text-muted-foreground/70 px-2 text-[11px] font-medium tracking-wider uppercase'>
+    <SidebarGroup className='px-2.5 py-1.5'>
+      <SidebarGroupLabel className='text-muted-foreground px-2 text-xs font-medium'>
         {title}
       </SidebarGroupLabel>
       <SidebarMenu>
@@ -125,6 +128,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
+        className={navButtonClass}
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
         render={
@@ -176,7 +180,9 @@ function SidebarMenuCollapsible({
     >
       <CollapsibleTrigger
         className='group/collapsible-trigger'
-        render={<SidebarMenuButton tooltip={item.title} />}
+        render={
+          <SidebarMenuButton className={navButtonClass} tooltip={item.title} />
+        }
       >
         {item.icon && <item.icon className='shrink-0' />}
         <span className='min-w-0 flex-1 truncate'>{item.title}</span>
@@ -188,6 +194,7 @@ function SidebarMenuCollapsible({
           {item.items.map((subItem) => (
             <SidebarMenuSubItem key={subItem.title}>
               <SidebarMenuSubButton
+                className={navButtonClass}
                 isActive={checkIsActive(href, subItem)}
                 render={
                   <Link
@@ -226,6 +233,7 @@ function SidebarMenuCollapsedDropdown({
           className='group/dropdown-trigger'
           render={
             <SidebarMenuButton
+              className={navButtonClass}
               tooltip={item.title}
               isActive={checkIsActive(href, item)}
             />

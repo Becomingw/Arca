@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
@@ -84,6 +84,7 @@ function getSummarySparkline(
 
 export function SummaryCards() {
   const { t } = useTranslation()
+  const headingId = useId()
   const user = useAuthStore((state) => state.auth.user)
   const { loading } = useStatus()
 
@@ -162,36 +163,36 @@ export function SummaryCards() {
   })
 
   return (
-    <div className='bg-card overflow-hidden rounded-2xl border shadow-xs'>
-      <div className='flex flex-col gap-2.5 p-3 sm:gap-3 sm:p-5'>
-        <div className='flex flex-wrap items-start justify-between gap-3'>
-          <div className='flex flex-col gap-1'>
-            <h3 className='text-sm font-semibold sm:text-base'>
-              {t('Usage at a glance')}
-            </h3>
-          </div>
-        </div>
-        <StaggerContainer className='grid grid-cols-3 gap-1.5 sm:gap-3'>
-          {items.map((it) => (
-            <StaggerItem
-              key={it.key}
-              className='bg-background/60 rounded-lg border px-2 py-1.5 sm:rounded-xl sm:p-3'
-            >
-              <StatCard
-                title={it.title}
-                value={it.value}
-                description={it.desc}
-                icon={it.icon}
-                tone={it.tone}
-                sparkline={it.sparkline}
-                sparklineVariant={it.sparklineVariant}
-                loading={loading}
-                compactMobile
-              />
-            </StaggerItem>
-          ))}
-        </StaggerContainer>
-      </div>
-    </div>
+    <section
+      aria-labelledby={headingId}
+      className='flex flex-col gap-3 sm:gap-4'
+    >
+      <h3
+        id={headingId}
+        className='text-base font-semibold tracking-tight sm:text-lg'
+      >
+        {t('Usage at a glance')}
+      </h3>
+      <StaggerContainer className='grid grid-cols-1 gap-2 min-[360px]:grid-cols-3 sm:gap-4'>
+        {items.map((it) => (
+          <StaggerItem
+            key={it.key}
+            className='border-border/75 bg-card/85 min-w-0 rounded-xl border p-3 shadow-xs sm:p-4'
+          >
+            <StatCard
+              title={it.title}
+              value={it.value}
+              description={it.desc}
+              icon={it.icon}
+              tone={it.tone}
+              sparkline={it.sparkline}
+              sparklineVariant={it.sparklineVariant}
+              loading={loading}
+              compactMobile
+            />
+          </StaggerItem>
+        ))}
+      </StaggerContainer>
+    </section>
   )
 }

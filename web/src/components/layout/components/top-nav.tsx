@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
-import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -29,87 +29,77 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
-import { type TopNavLink } from '../types'
+import type { TopNavLink } from '../types'
 
 type TopNavProps = React.HTMLAttributes<HTMLElement> & {
   links: TopNavLink[]
 }
+
+const navLinkClass =
+  'text-muted-foreground hover:text-foreground hover:bg-accent/60 max-w-[clamp(5.5rem,11vw,10rem)] truncate rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors data-[status=active]:bg-overview-accent-1/12 data-[status=active]:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50 xl:px-3'
 
 /**
  * 顶部导航栏组件
  * 在大屏幕显示水平导航，在小屏幕显示下拉菜单
  */
 export function TopNav({ className, links, ...props }: TopNavProps) {
-  // 规范化链接，确保所有可选属性都有默认值
-  const normalizedLinks = useMemo(
-    () =>
-      links.map((link) => ({
-        isActive: false,
-        disabled: false,
-        external: false,
-        ...link,
-      })),
-    [links]
-  )
+  const { t } = useTranslation()
 
   return (
     <>
-      {/* 移动端下拉菜单 */}
       <div className='lg:hidden'>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger
-            render={<Button size='icon' variant='outline' className='size-7' />}
+            render={
+              <Button
+                size='icon'
+                variant='ghost'
+                className='size-8 rounded-lg'
+                aria-label={t('Toggle navigation menu')}
+              />
+            }
           >
-            <Menu />
+            <Menu aria-hidden='true' />
           </DropdownMenuTrigger>
-          <DropdownMenuContent side='bottom' align='start'>
-            {normalizedLinks.map(
-              ({ title, href, isActive, disabled, external }) => (
-                <DropdownMenuItem
-                  key={`${title}-${href}`}
-                  render={
-                    external ? (
-                      <a
-                        href={href}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                      >
-                        {title}
-                      </a>
-                    ) : (
-                      <Link
-                        to={href}
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                        disabled={disabled}
-                      >
-                        {title}
-                      </Link>
-                    )
-                  }
-                ></DropdownMenuItem>
-              )
-            )}
+          <DropdownMenuContent side='bottom' align='end'>
+            {links.map(({ title, href, disabled, external }) => (
+              <DropdownMenuItem
+                key={`${title}-${href}`}
+                disabled={disabled}
+                render={
+                  external ? (
+                    <a
+                      href={disabled ? undefined : href}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                    />
+                  ) : (
+                    <Link to={href} disabled={disabled} />
+                  )
+                }
+              >
+                {title}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* 桌面端水平导航 */}
       <nav
-        className={cn(
-          'hidden items-center space-x-4 lg:flex lg:space-x-4 xl:space-x-6',
-          className
-        )}
+        aria-label={t('Header navigation')}
+        className={cn('hidden items-center gap-0.5 lg:flex', className)}
         {...props}
       >
-        {normalizedLinks.map(({ title, href, isActive, disabled, external }) =>
+        {links.map(({ title, href, isActive, disabled, external }) =>
           external ? (
             <a
               key={`${title}-${href}`}
-              href={href}
+              href={disabled ? undefined : href}
+              aria-disabled={disabled}
+              title={title}
               target='_blank'
               rel='noopener noreferrer'
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              className={cn(navLinkClass, isActive && 'text-foreground')}
             >
               {title}
             </a>
@@ -118,7 +108,9 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
               key={`${title}-${href}`}
               to={href}
               disabled={disabled}
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              title={title}
+              activeOptions={{ exact: href === '/' }}
+              className={cn(navLinkClass, isActive && 'text-foreground')}
             >
               {title}
             </Link>

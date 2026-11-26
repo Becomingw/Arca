@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Carousel,
   CarouselContent,
@@ -29,6 +30,7 @@ import {
   CarouselPrevious,
   type CarouselApi,
 } from '@/components/ui/carousel'
+import { cn } from '@/lib/utils'
 
 const clients = [
   {
@@ -112,8 +114,13 @@ export function ClientCarousel() {
     <Carousel
       ref={region}
       aria-label={t('Supported Applications')}
-      className='arca-client-carousel'
-      opts={{ loop: true, skipSnaps: false, duration: reducedMotion ? 0 : 25 }}
+      className='w-full min-w-0'
+      opts={{
+        align: 'start',
+        loop: true,
+        skipSnaps: false,
+        duration: reducedMotion ? 0 : 25,
+      }}
       setApi={setCarousel}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
@@ -124,56 +131,75 @@ export function ClientCarousel() {
         }
       }}
     >
-      <CarouselContent className='ml-0' aria-live={rotating ? 'off' : 'polite'}>
+      <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
+        <h2 className='text-muted-foreground text-sm font-medium'>
+          {t('Supported Applications')}
+        </h2>
+        <div className='flex items-center gap-1'>
+          <CarouselPrevious
+            variant='ghost'
+            className='static size-9 translate-y-0'
+            aria-label={t('Previous client')}
+          />
+          <Button
+            type='button'
+            size='icon'
+            variant='ghost'
+            className='size-9'
+            aria-label={paused ? t('Resume carousel') : t('Pause carousel')}
+            disabled={reducedMotion}
+            onClick={() => setPaused((value) => !value)}
+          >
+            {paused ? (
+              <Play aria-hidden='true' />
+            ) : (
+              <Pause aria-hidden='true' />
+            )}
+          </Button>
+          <CarouselNext
+            variant='ghost'
+            className='static size-9 translate-y-0'
+            aria-label={t('Next client')}
+          />
+        </div>
+      </div>
+      <CarouselContent
+        className='-ml-2.5'
+        aria-live={rotating ? 'off' : 'polite'}
+      >
         {clients.map((client, index) => (
           <CarouselItem
             key={client.name}
-            className='pl-0 sm:basis-1/3'
+            className='group/client basis-[85%] pl-2.5 min-[420px]:basis-1/2 sm:basis-1/3'
             aria-label={client.name}
             data-active={index === selected}
           >
-            <div className='arca-client-card'>
-              <img
-                src={`/brand/${client.logo}`}
-                alt=''
-                className={
-                  'monochrome' in client
-                    ? 'arca-client-icon arca-client-icon-mono'
-                    : 'arca-client-icon'
-                }
-                width='64'
-                height='64'
-                draggable={false}
-              />
-              <h2>{client.name}</h2>
-              <p>{client.protocol}</p>
-            </div>
+            <Card className='border-border/70 bg-card/60 group-data-[active=true]/client:border-primary/25 group-data-[active=true]/client:bg-card/90 h-full border py-3 ring-0'>
+              <CardContent className='flex items-center gap-3 px-3 text-start'>
+                <div className='bg-muted/70 flex size-9 shrink-0 items-center justify-center rounded-lg'>
+                  <img
+                    src={`/brand/${client.logo}`}
+                    alt=''
+                    className={cn(
+                      'size-5 object-contain',
+                      'monochrome' in client && 'dark:invert'
+                    )}
+                    width='20'
+                    height='20'
+                    draggable={false}
+                  />
+                </div>
+                <div className='min-w-0'>
+                  <h3 className='text-sm font-medium'>{client.name}</h3>
+                  <p className='text-muted-foreground text-xs break-words'>
+                    {client.protocol}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </CarouselItem>
         ))}
       </CarouselContent>
-      <div className='arca-carousel-actions'>
-        <CarouselPrevious
-          variant='ghost'
-          className='static size-10 translate-y-0'
-          aria-label={t('Previous client')}
-        />
-        <Button
-          type='button'
-          size='icon'
-          variant='ghost'
-          className='size-10'
-          aria-label={paused ? t('Resume carousel') : t('Pause carousel')}
-          disabled={reducedMotion}
-          onClick={() => setPaused((value) => !value)}
-        >
-          {paused ? <Play aria-hidden='true' /> : <Pause aria-hidden='true' />}
-        </Button>
-        <CarouselNext
-          variant='ghost'
-          className='static size-10 translate-y-0'
-          aria-label={t('Next client')}
-        />
-      </div>
     </Carousel>
   )
 }

@@ -22,11 +22,12 @@ import {
   ArrowUpRight,
   GitBranch,
   MessagesSquare,
+  Terminal,
   Workflow,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Progress,
@@ -34,6 +35,7 @@ import {
   ProgressValue,
 } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 
 const protocols = [
   { name: 'OpenAI Responses', route: '/v1/responses', client: 'Codex' },
@@ -41,39 +43,55 @@ const protocols = [
   { name: 'Gemini API', route: '/v1beta/models', client: 'Gemini CLI' },
 ] as const
 
+const featureHeading = 'text-2xl leading-snug font-semibold tracking-tight'
+const featureSurface = 'bg-card/65'
+
 export function AccessSection() {
   const { t } = useTranslation()
   return (
     <section
       id='access'
-      className='arca-home-section'
+      className='grid scroll-mt-24 items-center gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-12'
       aria-labelledby='access-title'
     >
-      <div className='arca-section-heading'>
-        <h2 id='access-title'>{t('One gateway for multiple protocols')}</h2>
-        <p>
+      <div className='space-y-2'>
+        <h2 id='access-title' className={featureHeading}>
+          {t('One gateway for multiple protocols')}
+        </h2>
+        <p className='text-muted-foreground max-w-xl text-sm leading-relaxed'>
           {t(
             'Connect your existing tools through model aliases, channel routing, and protocol conversion.'
           )}
         </p>
       </div>
-      <div className='arca-protocols'>
-        {protocols.map((protocol) => (
-          <Card key={protocol.route}>
-            <CardHeader>
-              <CardTitle>{protocol.client}</CardTitle>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-2'>
-              <span className='text-muted-foreground'>{protocol.name}</span>
-              <code>{protocol.route}</code>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Button variant='outline' render={<Link to='/pricing' />}>
-        {t('View Pricing')}{' '}
-        <ArrowRight data-icon='inline-end' aria-hidden='true' />
-      </Button>
+      <Card className={featureSurface}>
+        <CardContent>
+          <ul className='divide-border/70 divide-y'>
+            {protocols.map((protocol) => (
+              <li
+                key={protocol.route}
+                className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0'
+              >
+                <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
+                  <Terminal
+                    className='text-muted-foreground size-4'
+                    aria-hidden='true'
+                  />
+                </span>
+                <div className='min-w-0 flex-1'>
+                  <p className='text-sm font-medium'>{protocol.client}</p>
+                  <p className='text-muted-foreground text-xs'>
+                    {protocol.name}
+                  </p>
+                </div>
+                <code className='bg-muted text-foreground max-w-full rounded-md px-2 py-1 text-xs break-all'>
+                  {protocol.route}
+                </code>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -93,28 +111,35 @@ export function EntitlementsSection() {
   return (
     <section
       id='entitlements'
-      className='arca-home-section'
+      className='flex min-w-0 scroll-mt-24 flex-col gap-4'
       aria-labelledby='entitlements-title'
     >
-      <div className='arca-section-heading'>
-        <h2 id='entitlements-title'>
+      <div className='space-y-2'>
+        <h2 id='entitlements-title' className={featureHeading}>
           {t('Model access and budgets for every team')}
         </h2>
-        <p>
+        <p className='text-muted-foreground text-sm leading-relaxed'>
           {t(
             'Define model families, assign access to groups, and track total and per-family budgets.'
           )}
         </p>
       </div>
-      <Card className='arca-illustration'>
+      <Card className={featureSurface}>
         <CardHeader>
           <CardTitle>{t('Example usage and budgets')}</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue='team'>
-            <TabsList aria-label={t('Member examples')} className='max-w-full'>
+            <TabsList
+              aria-label={t('Member examples')}
+              className='h-auto max-w-full flex-wrap justify-start'
+            >
               {sampleMembers.map((member) => (
-                <TabsTrigger key={member.id} value={member.id}>
+                <TabsTrigger
+                  key={member.id}
+                  value={member.id}
+                  className='min-h-7 whitespace-normal'
+                >
                   {member.label}
                 </TabsTrigger>
               ))}
@@ -170,43 +195,54 @@ export function OperationsSection(props: { isAuthenticated: boolean }) {
   return (
     <section
       id='operations'
-      className='arca-home-section'
+      className='flex min-w-0 scroll-mt-24 flex-col gap-4'
       aria-labelledby='operations-title'
     >
-      <div className='arca-section-heading'>
-        <h2 id='operations-title'>
+      <div className='space-y-2'>
+        <h2 id='operations-title' className={featureHeading}>
           {t('Feedback and agent-assisted operations')}
         </h2>
-        <p>
+        <p className='text-muted-foreground text-sm leading-relaxed'>
           {t(
             'Track an issue from the first report through the confirmed resolution.'
           )}
         </p>
       </div>
-      <ol className='arca-operations arca-illustration'>
-        {steps.map((step) => (
-          <li key={step.label}>
-            <step.icon aria-hidden='true' />
-            <div>
-              <h3>{step.label}</h3>
-              <p>{step.description}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <Button
-        variant='outline'
-        render={
-          props.isAuthenticated ? (
-            <Link to='/feedback' />
-          ) : (
-            <Link to='/sign-in' search={{ redirect: '/feedback' }} />
-          )
-        }
-      >
-        {t('Open feedback')}{' '}
-        <ArrowRight data-icon='inline-end' aria-hidden='true' />
-      </Button>
+      <Card className={featureSurface}>
+        <CardContent>
+          <ol className='divide-border/70 divide-y'>
+            {steps.map((step) => (
+              <li
+                key={step.label}
+                className='flex gap-3 py-3 first:pt-0 last:pb-0'
+              >
+                <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
+                  <step.icon
+                    className='text-muted-foreground size-4'
+                    aria-hidden='true'
+                  />
+                </span>
+                <div>
+                  <h3 className='text-sm font-medium'>{step.label}</h3>
+                  <p className='text-muted-foreground mt-0.5 text-xs leading-relaxed'>
+                    {step.description}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <Link
+            to={props.isAuthenticated ? '/feedback' : '/sign-in'}
+            search={
+              props.isAuthenticated ? undefined : { redirect: '/feedback' }
+            }
+            className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}
+          >
+            {t('Open feedback')}
+            <ArrowRight data-icon='inline-end' aria-hidden='true' />
+          </Link>
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -225,17 +261,29 @@ export function LinksSection() {
   return (
     <section
       id='project-links'
-      className='arca-home-section'
+      className='border-border/70 scroll-mt-24 space-y-4 border-t pt-6 sm:pt-8'
       aria-labelledby='project-links-title'
     >
-      <div className='arca-section-heading'>
-        <h2 id='project-links-title'>{t('Project links')}</h2>
-      </div>
-      <ul className='arca-project-links'>
+      <h2 id='project-links-title' className={featureHeading}>
+        {t('Project links')}
+      </h2>
+      <ul className='grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6'>
         {resources.map((resource) => (
-          <li key={resource.href}>
-            <a href={resource.href} target='_blank' rel='noopener noreferrer'>
-              {resource.name} <ArrowUpRight aria-hidden='true' />
+          <li key={resource.href} className='min-w-0'>
+            <a
+              href={resource.href}
+              target='_blank'
+              rel='noopener noreferrer'
+              className={cn(
+                buttonVariants({ size: 'lg', variant: 'outline' }),
+                'bg-card/65 h-auto min-h-10 w-full justify-between px-3 py-2 text-start break-words whitespace-normal'
+              )}
+            >
+              {resource.name}{' '}
+              <ArrowUpRight
+                aria-hidden='true'
+                className='text-muted-foreground size-3.5'
+              />
             </a>
           </li>
         ))}

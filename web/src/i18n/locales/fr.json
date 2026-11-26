@@ -8090,6 +8090,7 @@
     "Redemption usage exceeds the maximum": "Redemption usage exceeds the maximum",
     "Inspect requests, errors, and usage details": "Inspect requests, errors, and usage details",
     "Manage API keys and view routing and service health.": "Manage API keys and view routing and service health.",
-    "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances."
+    "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances.",
+    "Manage API keys, review usage, and check your model access.": "Gérez vos clés API, consultez votre utilisation et vérifiez votre accès aux modèles."
   }
 }

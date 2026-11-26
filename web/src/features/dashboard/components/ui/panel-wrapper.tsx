@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
@@ -42,7 +42,9 @@ function PanelHeader(props: {
 }) {
   const heading = (
     <div className='flex flex-col gap-1'>
-      <div className='text-sm font-semibold'>{props.title}</div>
+      <div className='text-sm font-semibold tracking-tight sm:text-base'>
+        {props.title}
+      </div>
       {props.description != null && (
         <div className='text-muted-foreground text-xs'>{props.description}</div>
       )}
@@ -50,7 +52,7 @@ function PanelHeader(props: {
   )
 
   return (
-    <div className='border-b px-4 py-3 sm:px-5'>
+    <div className='border-border/75 border-b px-4 py-3 sm:px-5 sm:py-4'>
       {props.actions != null ? (
         <div className='flex items-start justify-between gap-2'>
           {heading}
@@ -68,7 +70,7 @@ export function PanelWrapper(props: PanelWrapperProps) {
   const resolvedEmptyMessage = props.emptyMessage ?? t('No data available')
   const height = props.height ?? 'h-64'
   const frameClassName = cn(
-    'overflow-hidden rounded-2xl border bg-card shadow-xs',
+    'border-border/75 bg-card/85 overflow-hidden rounded-xl border shadow-xs',
     props.className
   )
 

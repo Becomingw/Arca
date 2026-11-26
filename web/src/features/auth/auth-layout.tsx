@@ -20,10 +20,9 @@ import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { ProductBackdrop } from '@/components/layout/components/product-backdrop'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-
-import './auth-layout.css'
 
 type AuthLayoutProps = {
   children: React.ReactNode
@@ -33,8 +32,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   const { t } = useTranslation()
 
   return (
-    <div className='arca-auth-layout bg-background text-foreground flex min-h-svh flex-col'>
-      <header className='border-border bg-background border-b px-4 py-3 sm:px-8'>
+    <div className='bg-background text-foreground relative isolate flex min-h-svh flex-col'>
+      <ProductBackdrop className='max-h-full' />
+      <header className='relative mx-auto flex min-h-16 w-full max-w-7xl items-center px-3 sm:px-6 xl:px-8'>
         <Link
           to='/'
           className={buttonVariants({
@@ -46,8 +46,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           {t('Back to Home')}
         </Link>
       </header>
-      <main className='flex flex-1 items-center justify-center px-4 py-8 sm:px-6 sm:py-12'>
-        <Card className='w-full max-w-md gap-6 py-6 shadow-lg sm:py-8'>
+      <main className='relative flex flex-1 items-center justify-center px-3 pt-4 pb-10 sm:px-6 sm:pt-8 sm:pb-12'>
+        <Card className='bg-card/90 w-full max-w-md gap-6 py-6 shadow-sm sm:py-8'>
           <CardHeader className='justify-items-center gap-3 px-5 sm:px-8'>
             <img
               src='/brand/arca.svg'
@@ -56,7 +56,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               height={60}
               className='h-auto w-14'
             />
-            <span className='font-serif text-3xl leading-none tracking-tight'>
+            <span className='text-2xl leading-none font-bold tracking-tight'>
               Arca
             </span>
           </CardHeader>

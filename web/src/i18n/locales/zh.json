@@ -8090,6 +8090,7 @@
     "Redemption usage exceeds the maximum": "兑换码用量超过上限",
     "Inspect requests, errors, and usage details": "查看请求、错误和用量详情",
     "Manage API keys and view routing and service health.": "管理 API 密钥，查看路由和服务状态。",
-    "Your subscription controls model access and usage allowances.": "订阅决定可用模型和用量上限。"
+    "Your subscription controls model access and usage allowances.": "订阅决定可用模型和用量上限。",
+    "Manage API keys, review usage, and check your model access.": "管理 API 密钥、查看用量和可用模型。"
   }
 }

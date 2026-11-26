@@ -17,12 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { ArrowDown, ArrowRight } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
-import { Button } from '@/components/ui/button'
+import { ProductBackdrop } from '@/components/layout/components/product-backdrop'
+import { PageTransition } from '@/components/page-transition'
+import { buttonVariants } from '@/components/ui/button'
+import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { cn } from '@/lib/utils'
 
 import { ClientCarousel } from './client-carousel'
 import {
@@ -32,74 +36,92 @@ import {
   OperationsSection,
 } from './feature-sections'
 
-import './arca-home.css'
-
 type ArcaHomeProps = { isAuthenticated: boolean }
 
 export function ArcaHome(props: ArcaHomeProps) {
   const { t } = useTranslation()
+  const modelSquare = useTopNavLinks().find((link) => link.href === '/pricing')
   return (
-    <div className='arca-public-shell'>
-      <PublicLayout
-        logo={<img src='/brand/arca.svg' alt='' className='size-full' />}
-        siteName='Arca'
-        showMainContainer={false}
-      >
-        <main className='arca-home' id='arca-home'>
-          <section className='arca-home-hero' aria-labelledby='arca-title'>
-            <nav className='arca-home-index' aria-label={t('On this page')}>
-              <a href='#access'>{t('Client access')}</a>
-              <a href='#entitlements'>{t('Entitlements')}</a>
-              <a href='#operations'>{t('Operations')}</a>
-              <a href='#project-links'>{t('Project links')}</a>
-            </nav>
-            <img
-              className='arca-home-mark'
-              src='/brand/arca.svg'
-              alt=''
-              width='154'
-              height='167'
-              fetchPriority='high'
-            />
-            <h1 id='arca-title'>Arca</h1>
-            <p className='arca-home-intro'>{t('Connect your AI workflows')}</p>
+    <PublicLayout showMainContainer={false}>
+      <main className='relative isolate' id='arca-home'>
+        <ProductBackdrop />
+        <PageTransition className='relative mx-auto flex w-full max-w-[1280px] flex-col gap-12 px-3 pt-16 pb-12 sm:gap-16 sm:px-6 sm:pt-20 sm:pb-16 xl:px-8'>
+          <section
+            className='mx-auto flex w-full max-w-3xl flex-col items-center gap-8 pt-8 text-center sm:gap-10 sm:pt-12'
+            aria-labelledby='arca-title'
+          >
+            <div>
+              <h1
+                id='arca-title'
+                className='text-[clamp(3.5rem,10vw,5.25rem)] leading-none font-bold tracking-tight'
+              >
+                Arca
+              </h1>
+              <p className='text-muted-foreground mt-3 text-base sm:mt-4 sm:text-lg'>
+                {t('Connect your AI workflows')}
+              </p>
+              <div className='mt-6 flex flex-wrap justify-center gap-2.5'>
+                <Link
+                  to={props.isAuthenticated ? '/workspace' : '/sign-in'}
+                  search={
+                    props.isAuthenticated
+                      ? undefined
+                      : { redirect: '/workspace' }
+                  }
+                  className={cn(
+                    buttonVariants({ size: 'lg' }),
+                    'h-10 px-4 has-data-[icon=inline-end]:pr-3'
+                  )}
+                >
+                  {props.isAuthenticated ? t('Open workspace') : t('Sign in')}
+                  <ArrowRight data-icon='inline-end' aria-hidden='true' />
+                </Link>
+                {modelSquare && (
+                  <Link
+                    to={modelSquare.requiresAuth ? '/sign-in' : '/pricing'}
+                    search={
+                      modelSquare.requiresAuth
+                        ? { redirect: '/pricing' }
+                        : undefined
+                    }
+                    className={cn(
+                      buttonVariants({ size: 'lg', variant: 'outline' }),
+                      'bg-background/70 h-10 px-4'
+                    )}
+                  >
+                    {modelSquare.title}
+                  </Link>
+                )}
+              </div>
+            </div>
             <ClientCarousel />
-            {props.isAuthenticated ? (
-              <Button
-                size='lg'
-                className='min-h-10 px-5'
-                render={<Link to='/workspace' />}
-              >
-                {t('Open workspace')}{' '}
-                <ArrowRight data-icon='inline-end' aria-hidden='true' />
-              </Button>
-            ) : (
-              <Button
-                size='lg'
-                className='min-h-10 px-5'
-                render={
-                  <Link to='/sign-in' search={{ redirect: '/workspace' }} />
-                }
-              >
-                {t('Sign in')}{' '}
-                <ArrowRight data-icon='inline-end' aria-hidden='true' />
-              </Button>
-            )}
-            <a
-              className='arca-home-scroll'
-              href='#access'
-              aria-label={t('Client access')}
-            >
-              <ArrowDown aria-hidden='true' />
-            </a>
           </section>
+          <nav
+            className='border-border/70 text-muted-foreground flex flex-wrap items-center gap-x-6 gap-y-2 border-b pb-4 text-sm'
+            aria-label={t('On this page')}
+          >
+            <a className='hover:text-foreground' href='#access'>
+              {t('Client access')}
+            </a>
+            <a className='hover:text-foreground' href='#entitlements'>
+              {t('Entitlements')}
+            </a>
+            <a className='hover:text-foreground' href='#operations'>
+              {t('Operations')}
+            </a>
+            <a className='hover:text-foreground' href='#project-links'>
+              {t('Project links')}
+            </a>
+          </nav>
           <AccessSection />
-          <EntitlementsSection />
-          <OperationsSection isAuthenticated={props.isAuthenticated} />
+          <div className='grid gap-12 lg:grid-cols-2 lg:gap-6'>
+            <EntitlementsSection />
+            <OperationsSection isAuthenticated={props.isAuthenticated} />
+          </div>
           <LinksSection />
-        </main>
-        <Footer name='Arca' logo='/brand/arca.svg' />
-      </PublicLayout>
-    </div>
+        </PageTransition>
+      </main>
+      <Footer name='Arca' logo='/brand/arca.svg' />
+    </PublicLayout>
   )
 }

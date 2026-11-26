@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { ProductBackdrop } from './product-backdrop'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -42,19 +43,26 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   return (
     <LayoutProvider>
       <SearchProvider>
-        <SidebarProvider defaultOpen={defaultOpen} className='flex-col'>
+        <SidebarProvider
+          defaultOpen={defaultOpen}
+          className='bg-background has-data-[variant=inset]:bg-background flex-col [--app-header-height:3.5rem]'
+        >
           <SkipToMain />
           <AppHeader />
           <div className='flex min-h-0 w-full flex-1'>
             <AppSidebar />
             <SidebarInset
+              id='content'
+              tabIndex={-1}
               className={cn(
-                '@container/content',
+                '@container/content isolate min-w-0',
                 'h-[calc(100svh-var(--app-header-height,0px))]',
                 'min-h-0 overflow-hidden',
+                'md:peer-data-[variant=inset]:ring-border/70 md:peer-data-[variant=inset]:ring-1',
                 'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
               )}
             >
+              <ProductBackdrop className='-z-10 opacity-15' />
               {props.children ?? <AnimatedOutlet />}
             </SidebarInset>
           </div>

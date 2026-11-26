@@ -125,7 +125,7 @@ export function AppHeader({
       {rightContent ?? (
         <div className='ms-auto flex shrink-0 items-center gap-1 sm:gap-2'>
           {showTopNav && (
-            <div className='me-1 hidden lg:block'>
+            <div className='lg:border-border/60 lg:me-1 lg:border-e lg:pe-3'>
               <TopNav links={links} />
             </div>
           )}
