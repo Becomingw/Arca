@@ -81,12 +81,13 @@ func CheckArcaRelayEntitlement(c *gin.Context, alias string) *types.NewAPIError 
 	return nil
 }
 
-func arcaBudgetAlias(entitlement arcaRelayEntitlement, alias string) string {
+// ArcaBudgetAlias resolves the ledger alias for a public relay model name.
+func ArcaBudgetAlias(policy model.ArcaEntitlementPolicy, effective model.ArcaEffectiveEntitlement, alias string) string {
 	// An explicit model or family alias can distinguish a literal suffix.
-	if _, ok := entitlement.effective.Allocation.Models[alias]; ok {
+	if _, ok := effective.Allocation.Models[alias]; ok {
 		return alias
 	}
-	for _, family := range entitlement.policy.ModelFamilies {
+	for _, family := range policy.ModelFamilies {
 		for _, member := range family.Models {
 			if member == alias {
 				return alias
@@ -110,7 +111,7 @@ func reserveArcaRequestBudget(c *gin.Context, info *relaycommon.RelayInfo, quota
 	}
 	budget := &arcaRequestBudget{
 		tracked: true, userID: info.UserId, requestID: info.RequestId,
-		alias: arcaBudgetAlias(entitlement, info.OriginModelName), entitlement: entitlement,
+		alias: ArcaBudgetAlias(entitlement.policy, entitlement.effective, info.OriginModelName), entitlement: entitlement,
 		authorization: model.ArcaManagedAuthorization{
 			PublicAlias: info.OriginModelName, Unbounded: entitlement.effective.Allocation.Unlimited,
 		},

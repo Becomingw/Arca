@@ -457,6 +457,16 @@ func TokenOrUserAuth() func(c *gin.Context) {
 // 即使令牌已过期或已耗尽，也允许访问；已禁用的令牌会被拒绝。
 // 仍然检查令牌 IP 白名单和用户是否被封禁。
 func TokenAuthReadOnly() func(c *gin.Context) {
+	return tokenAuthReadOnly(false)
+}
+
+// TokenAuthSubscriptionUsage authorizes an explicitly opted-in inference key.
+// Exhaustion remains readable so clients can check the allowance's recovery.
+func TokenAuthSubscriptionUsage() gin.HandlerFunc {
+	return tokenAuthReadOnly(true)
+}
+
+func tokenAuthReadOnly(subscriptionUsage bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := c.Request.Header.Get("Authorization")
 		if key == "" {
@@ -464,19 +474,35 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			c.Abort()
 			return
 		}
-		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
-			key = strings.TrimSpace(key[7:])
+		var token *model.Token
+		var err error
+		if subscriptionUsage {
+			scheme, value, ok := strings.Cut(key, " ")
+			key = strings.TrimPrefix(strings.TrimSpace(value), "sk-")
+			if !ok || !strings.EqualFold(scheme, "Bearer") || key == "" || len(key) > 128 || strings.ContainsAny(key, " \t\r\n") {
+				common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
+				c.Abort()
+				return
+			}
+			token, err = model.GetTokenForSubscriptionUsage(c.Request.Context(), key)
+		} else {
+			if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
+				key = strings.TrimSpace(key[7:])
+			}
+			key = strings.TrimPrefix(key, "sk-")
+			key, _, _ = strings.Cut(key, "-")
+			token, err = model.GetTokenByKey(key, false)
 		}
-		key = strings.TrimPrefix(key, "sk-")
-		parts := strings.Split(key, "-")
-		key = parts[0]
 
-		token, err := model.GetTokenByKey(key, false)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
 			} else {
-				common.SysLog(common.LogText("TokenAuthReadOnly GetTokenByKey database error: %s", err.Error()))
+				if subscriptionUsage {
+					common.SysLog("could not load inference key for subscription usage")
+				} else {
+					common.SysLog(common.LogText("TokenAuthReadOnly GetTokenByKey database error: %s", err.Error()))
+				}
 				common.ApiErrorStatus(c, http.StatusInternalServerError, errors.New(common.TranslateMessage(c, i18n.MsgDatabaseError)))
 			}
 			c.Abort()
@@ -487,6 +513,12 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		// data, such as token usage logs; only explicitly disabled tokens are denied.
 		if token.Status == common.TokenStatusDisabled {
 			common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenStatusUnavailable)))
+			c.Abort()
+			return
+		}
+		if subscriptionUsage && ((token.Status != common.TokenStatusEnabled && token.Status != common.TokenStatusExhausted) ||
+			(token.ExpiredTime != -1 && token.ExpiredTime <= common.GetTimestamp())) {
+			common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
 			c.Abort()
 			return
 		}
@@ -505,7 +537,16 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			}
 		}
 
-		userCache, err := model.GetUserCache(token.UserId)
+		var userCache *model.UserBase
+		if subscriptionUsage {
+			var user *model.User
+			user, err = model.GetUserById(token.UserId, false)
+			if err == nil {
+				userCache = user.ToBaseUser()
+			}
+		} else {
+			userCache, err = model.GetUserCache(token.UserId)
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// A self-deleted account keeps its API keys; they must read as invalid.
 			common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
@@ -521,6 +562,27 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		if userCache.Status != common.UserStatusEnabled {
 			common.ApiErrorStatus(c, http.StatusForbidden, errors.New(common.TranslateMessage(c, i18n.MsgAuthUserBanned)))
 			c.Abort()
+			return
+		}
+
+		if subscriptionUsage {
+			if !token.AllowUserQuotaQuery {
+				common.ApiErrorStatus(c, http.StatusForbidden, errors.New("Subscription usage queries are disabled for this API key"))
+				c.Abort()
+				return
+			}
+			if token.Group != "" && (!service.GroupInUserUsableGroups(userCache.Group, token.Group) ||
+				(token.Group != "auto" && !ratio_setting.ContainsGroupRatio(token.Group))) {
+				common.ApiErrorStatus(c, http.StatusForbidden, errors.New("The API key group is no longer available"))
+				c.Abort()
+				return
+			}
+			common.SetContextKey(c, constant.ContextKeyUserGroup, userCache.Group)
+			if err := SetupContextForToken(c, token); err != nil {
+				c.Abort()
+				return
+			}
+			c.Next()
 			return
 		}
 

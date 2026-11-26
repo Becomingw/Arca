@@ -99,6 +99,10 @@ func SetApiRouter(router *gin.Engine) {
 			c.Next()
 		}, middleware.TokenAuth(), controller.GetArcaOpenCodeConfig)
 		apiRouter.GET("/opencode/setup", controller.DownloadArcaOpenCodeSync)
+		apiRouter.GET("/ccswitch/usage", middleware.DisableCache(), middleware.CriticalRateLimit(), func(c *gin.Context) {
+			c.Writer.Header().Add("Vary", "Authorization")
+			c.Next()
+		}, middleware.TokenAuthSubscriptionUsage(), controller.GetArcaCCSwitchUsage)
 
 		userRoute := apiRouter.Group("/user")
 		{

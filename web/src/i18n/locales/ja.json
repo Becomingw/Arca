@@ -8091,6 +8091,15 @@
     "Inspect requests, errors, and usage details": "Inspect requests, errors, and usage details",
     "Manage API keys and view routing and service health.": "Manage API keys and view routing and service health.",
     "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances.",
-    "Manage API keys, review usage, and check your model access.": "API キーの管理、使用量の確認、利用できるモデルの確認ができます。"
+    "Manage API keys, review usage, and check your model access.": "API キーの管理、使用量の確認、利用できるモデルの確認ができます。",
+    "Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.": "上でアクセス権限を指定したトークンを作成します。エージェントは権限に応じてユーザー、グループ、チャネル、モデルルート、利用枠、フィードバックを確認できます。",
+    "Subscription changes require entitlement write access and a confirmed preview.": "サブスクリプションの変更には利用権限の書き込み権限とプレビューの確認が必要です。",
+    "Assign or clear Arca subscriptions after confirmation.": "確認後に Arca サブスクリプションを割り当てまたは解除します。",
+    "Rolling 5 hours": "直近 5 時間",
+    "Reserved usage": "予約済み利用枠",
+    "No subscription quota windows apply to this key.": "このキーに適用されるサブスクリプション利用枠はありません。",
+    "Subscription usage will be enabled in CC Switch.": "CC Switch でサブスクリプションの使用状況の照会が有効になります。",
+    "Enable “Allow querying user quota” in this API key’s settings to include subscription usage.": "この API キーの設定でユーザー利用枠の照会を許可すると、サブスクリプションの使用状況を表示できます。",
+    "Subscription usage requires HTTPS or a local loopback address.": "サブスクリプションの使用状況を照会するには HTTPS またはローカルのループバックアドレスが必要です。"
   }
 }

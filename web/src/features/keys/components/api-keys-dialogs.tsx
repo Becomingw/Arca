@@ -37,6 +37,7 @@ export function ApiKeysDialogs() {
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenId={currentRow?.id}
         tokenKey={resolvedKey}
+        allowUsageQuery={currentRow?.allow_user_quota_query}
       />
     </>
   )

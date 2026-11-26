@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"strings"
@@ -45,6 +46,19 @@ func GetGroupEnabledModels(group string) []string {
 	// Find distinct models
 	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
 	return models
+}
+
+// ReadGroupsEnabledModels returns distinct aliases for authorized groups and
+// distinguishes an empty catalog from a failed read.
+func ReadGroupsEnabledModels(ctx context.Context, groups []string) ([]string, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	var aliases []string
+	err := DB.WithContext(ctx).Model(&Ability{}).
+		Where(clause.IN{Column: clause.Column{Name: "group"}, Values: lo.ToAnySlice(groups)}).
+		Where("enabled = ?", true).Distinct("model").Pluck("model", &aliases).Error
+	return aliases, err
 }
 
 func GetEnabledModels() []string {

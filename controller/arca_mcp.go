@@ -26,6 +26,8 @@ var (
 	// Native model metadata uses the dashboard's model:read PAT scope and
 	// AdminAuth. Channel reads additionally use their live Casbin permission.
 	arcaMCPModelRead = authz.Permission{Resource: "model", Action: authz.ActionRead}
+	arcaMCPUserRead  = authz.Permission{Resource: "user", Action: authz.ActionRead}
+	arcaMCPGroupRead = authz.Permission{Resource: "group", Action: authz.ActionRead}
 )
 
 type arcaMCPRequest struct {
@@ -36,11 +38,12 @@ type arcaMCPRequest struct {
 }
 
 type arcaMCPTool struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Permission  authz.Permission `json:"-"`
-	InputSchema gin.H            `json:"inputSchema"`
-	Annotations gin.H            `json:"annotations"`
+	Name         string           `json:"name"`
+	Description  string           `json:"description"`
+	Permission   authz.Permission `json:"-"`
+	AlsoRequires authz.Permission `json:"-"`
+	InputSchema  gin.H            `json:"inputSchema"`
+	Annotations  gin.H            `json:"annotations"`
 }
 
 func arcaMCPToolCatalog() []arcaMCPTool {
@@ -74,6 +77,15 @@ func arcaMCPToolCatalog() []arcaMCPTool {
 	previewBody["required"] = []string{"user_id"}
 	previewSchema := obj(gin.H{"body": previewBody})
 	previewSchema["required"] = []string{"body"}
+	paging := gin.H{"limit": num, "skip": num}
+	routeFilter := arcaMCPRequiredObject(obj(gin.H{"group": str, "model": str, "limit": num, "skip": num}), "group", "model")
+	assignment := write(nil, gin.H{
+		"expected_version": num,
+		"subject_type":     gin.H{"type": "string", "enum": []string{"user", "group"}},
+		"user_id":          num,
+		"group":            str,
+		"plan_id":          gin.H{"type": "string", "description": "An existing plan ID, or an empty string to clear a direct assignment."},
+	}, []string{"expected_version", "subject_type", "plan_id"})
 	return []arcaMCPTool{
 		{Name: "arca_identity", Description: "Show the account and current permissions for this token.", InputSchema: obj(gin.H{}), Annotations: readOnly},
 		{Name: "arca_feedback_list", Description: "List public Arca feedback topics", Permission: authz.ArcaFeedbackRead,
@@ -93,6 +105,23 @@ func arcaMCPToolCatalog() []arcaMCPTool {
 			InputSchema: obj(gin.H{}), Annotations: readOnly},
 		{Name: "arca_benefits_preview", Description: "Preview a user's model access and usage limits without changing them.", Permission: authz.ArcaEntitlementsRead,
 			InputSchema: previewSchema, Annotations: readOnly},
+		{Name: "arca_users_list", Description: "List account IDs, roles, status and native groups. Optionally filter by an exact username or native group.", Permission: arcaMCPUserRead,
+			InputSchema: query(gin.H{"limit": num, "skip": num, "username": str, "group": str}), Annotations: readOnly},
+		{Name: "arca_user_get", Description: "Read an account's internal ID, native group, role and status.", Permission: arcaMCPUserRead,
+			InputSchema: arcaMCPRequiredObject(obj(gin.H{"path": path("user_id")}), "path"), Annotations: readOnly},
+		{Name: "arca_groups_list", Description: "List native groups available for subscription assignment.", Permission: arcaMCPGroupRead,
+			InputSchema: query(paging), Annotations: readOnly},
+		{Name: "arca_subscription_plans_list", Description: "List subscription plans and the current policy version for a previewed assignment.", Permission: authz.ArcaEntitlementsRead,
+			InputSchema: query(paging), Annotations: readOnly},
+		{Name: "arca_benefits_get", Description: "Read an account's effective plan, model rules, metered windows and temporary grants.", Permission: authz.ArcaEntitlementsRead,
+			InputSchema: arcaMCPRequiredObject(obj(gin.H{"path": path("user_id")}), "path"), Annotations: readOnly},
+		{Name: "arca_provider_get", Description: "Read a channel's persisted health, routing weights, credential counts and quota-probe status.", Permission: authz.ChannelRead,
+			InputSchema: arcaMCPRequiredObject(obj(gin.H{"path": path("channel_id")}), "path"), Annotations: readOnly},
+		{Name: "arca_model_routes", Description: "List stored channel candidates for an exact gateway model alias and native routing group.", Permission: authz.ChannelRead,
+			AlsoRequires: arcaMCPModelRead,
+			InputSchema:  arcaMCPRequiredObject(obj(gin.H{"query": routeFilter}), "query"), Annotations: readOnly},
+		{Name: "arca_subscription_assign", Description: "Preview and confirm assigning or clearing a plan for one user or native group.", Permission: authz.ArcaEntitlementsWrite,
+			InputSchema: assignment, Annotations: gin.H{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false}},
 		{Name: "arca_feedback_create", Description: "Preview and confirm creating a public feedback topic.", Permission: authz.ArcaFeedbackWrite,
 			InputSchema: write(nil, gin.H{"title": str, "description": str, "category": str, "model": str, "visibility": str, "client_request_id": str, "request_id": str, "include_diagnostics": boo},
 				[]string{"title", "description", "category", "client_request_id"}), Annotations: mutation},
@@ -101,6 +130,11 @@ func arcaMCPToolCatalog() []arcaMCPTool {
 				"visibility": str, "content": str, "status": str, "comment": str, "diagnostic_request_id": str},
 				[]string{"expected_version", "client_request_id", "action"}), Annotations: mutation},
 	}
+}
+
+func arcaMCPRequiredObject(schema gin.H, required ...string) gin.H {
+	schema["required"] = required
+	return schema
 }
 
 type arcaMCPIdentity struct {
@@ -114,16 +148,20 @@ func (actor arcaMCPIdentity) can(permission authz.Permission) bool {
 	if permission.Resource == "" {
 		return true
 	}
-	if permission == authz.ArcaEntitlementsRead && actor.Role != common.RoleRootUser {
+	if permission.Resource == authz.ArcaEntitlementsRead.Resource && actor.Role != common.RoleRootUser {
 		return false
 	}
 	if !service.AccessTokenScopeGranted(actor.Scopes, service.AccessTokenScopeOf(permission)) {
 		return false
 	}
-	if permission == arcaMCPModelRead {
+	if permission == arcaMCPModelRead || permission == arcaMCPUserRead || permission == arcaMCPGroupRead {
 		return actor.Role >= common.RoleAdminUser
 	}
 	return authz.Can(actor.UserID, actor.Role, permission)
+}
+
+func (actor arcaMCPIdentity) canUse(tool arcaMCPTool) bool {
+	return actor.can(tool.Permission) && actor.can(tool.AlsoRequires)
 }
 
 func ArcaMCP(c *gin.Context) {
@@ -215,7 +253,7 @@ func ArcaMCP(c *gin.Context) {
 		result = gin.H{}
 	case "tools/list":
 		catalog := arcaMCPToolCatalog()
-		result = gin.H{"tools": slices.DeleteFunc(catalog, func(tool arcaMCPTool) bool { return !actor.can(tool.Permission) })}
+		result = gin.H{"tools": slices.DeleteFunc(catalog, func(tool arcaMCPTool) bool { return !actor.canUse(tool) })}
 	case "tools/call":
 		var call struct {
 			Name      string            `json:"name"`
@@ -243,7 +281,7 @@ func arcaMCPAuthorizedTool(actor arcaMCPIdentity, name string) (arcaMCPTool, boo
 		name = "arca_" + old
 	}
 	for _, tool := range arcaMCPToolCatalog() {
-		if tool.Name == name && actor.can(tool.Permission) {
+		if tool.Name == name && actor.canUse(tool) {
 			return tool, true
 		}
 	}
@@ -275,12 +313,16 @@ func callArcaMCPTool(c *gin.Context, actor arcaMCPIdentity, tool arcaMCPTool, ra
 		if len(args.Path) != 0 || len(args.Query) != 0 {
 			return arcaMCPToolError(errArcaFeedbackInput)
 		}
-		effective := make([]string, 0, 3)
-		for _, permission := range []authz.Permission{authz.ArcaFeedbackRead, authz.ArcaFeedbackWrite, authz.ArcaMonitoringRead, authz.ArcaEntitlementsRead, authz.ChannelRead, arcaMCPModelRead} {
-			if actor.can(permission) {
-				effective = append(effective, service.AccessTokenScopeOf(permission))
+		effective := []string{}
+		for _, available := range arcaMCPToolCatalog() {
+			if available.Permission.Resource != "" && actor.canUse(available) {
+				scope := service.AccessTokenScopeOf(available.Permission)
+				if !slices.Contains(effective, scope) {
+					effective = append(effective, scope)
+				}
 			}
 		}
+		slices.Sort(effective)
 		actor.Scopes = effective
 		result = actor
 	case "arca_feedback_list":
@@ -337,6 +379,10 @@ func callArcaMCPTool(c *gin.Context, actor arcaMCPIdentity, tool arcaMCPTool, ra
 		}
 	case "arca_feedback_create", "arca_feedback_command":
 		result, err = writeArcaMCPFeedback(c, actor, tool.Name, args)
+	case "arca_users_list", "arca_user_get", "arca_groups_list", "arca_subscription_plans_list", "arca_benefits_get", "arca_provider_get", "arca_model_routes":
+		result, err = readArcaMCPOperation(ctx, tool.Name, args)
+	case "arca_subscription_assign":
+		result, err = writeArcaMCPSubscriptionAssignment(c, actor, tool.Name, args)
 	}
 	if err != nil {
 		return arcaMCPToolError(err)
@@ -428,30 +474,13 @@ func writeArcaMCPFeedback(c *gin.Context, actor arcaMCPIdentity, name string, ar
 	if err != nil {
 		return nil, err
 	}
-	ticket := model.ArcaMCPConfirmation{BindingHash: binding, ActorID: actor.UserID, TokenID: actor.TokenID}
-	if args.DryRun == nil || *args.DryRun {
-		if args.Confirmation != "" {
-			return nil, errArcaFeedbackInput
-		}
-		rawTicket := rand.Text()
-		ticket.TicketHash = model.AccessTokenFingerprint(rawTicket)
-		ticket.ExpiresAt = common.GetTimestamp() + 300
-		if err := model.StoreArcaMCPConfirmation(ctx, ticket); err != nil {
-			return nil, err
-		}
-		return gin.H{"dry_run": true, "confirmation": rawTicket, "expires_at": ticket.ExpiresAt,
-			"tool": name, "issue_id": issueID, "visibility": model.ArcaFeedbackPublic}, nil
-	}
-	if len(args.Confirmation) < 16 || len(args.Confirmation) > 128 {
-		return nil, errArcaMCPConfirmation
-	}
-	ticket.TicketHash = model.AccessTokenFingerprint(args.Confirmation)
-	ok, err := model.ConsumeArcaMCPConfirmation(ctx, ticket)
+	confirmation, err := authorizeArcaMCPMutation(ctx, actor, args, binding)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, errArcaMCPConfirmation
+	if confirmation != nil {
+		return gin.H{"dry_run": true, "confirmation": confirmation.Ticket, "expires_at": confirmation.ExpiresAt,
+			"tool": name, "issue_id": issueID, "visibility": model.ArcaFeedbackPublic}, nil
 	}
 
 	var result model.ArcaFeedbackMutation
@@ -465,6 +494,40 @@ func writeArcaMCPFeedback(c *gin.Context, actor arcaMCPIdentity, name string, ar
 		Action: name, TokenRef: c.GetString("access_token_ref"), Success: err == nil,
 	})
 	return result, err
+}
+
+type arcaMCPMutationPreview struct {
+	Ticket    string
+	ExpiresAt int64
+}
+
+func authorizeArcaMCPMutation(ctx context.Context, actor arcaMCPIdentity, args arcaMCPToolArguments, binding string) (*arcaMCPMutationPreview, error) {
+	ticket := model.ArcaMCPConfirmation{BindingHash: binding, ActorID: actor.UserID, TokenID: actor.TokenID}
+	if args.DryRun == nil || *args.DryRun {
+		if args.Confirmation != "" {
+			return nil, errArcaFeedbackInput
+		}
+		rawTicket := rand.Text()
+		ticket.TicketHash = model.AccessTokenFingerprint(rawTicket)
+		ticket.ExpiresAt = common.GetTimestamp() + 300
+		if err := model.StoreArcaMCPConfirmation(ctx, ticket); err != nil {
+			return nil, err
+		}
+		return &arcaMCPMutationPreview{Ticket: rawTicket, ExpiresAt: ticket.ExpiresAt}, nil
+	}
+	if len(args.Confirmation) < 16 || len(args.Confirmation) > 128 {
+		return nil, errArcaMCPConfirmation
+	}
+	ticket.TicketHash = model.AccessTokenFingerprint(args.Confirmation)
+	ok, err := model.ConsumeArcaMCPConfirmation(ctx, ticket)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errArcaMCPConfirmation
+	}
+
+	return nil, nil
 }
 
 func decodeArcaMCPObject(raw common.RawMessage, target any, allowed ...string) error {
@@ -491,6 +554,8 @@ func arcaMCPToolError(err error) gin.H {
 		message = "The token cannot perform this operation."
 	case errors.Is(err, model.ErrArcaFeedbackConflict):
 		message = "The topic version or idempotency key changed. Read the current state before retrying."
+	case errors.Is(err, model.ErrArcaEntitlementConflict):
+		message = "The subscription policy version changed. Read the current policy and preview again."
 	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, errArcaDiagnosticMissing):
 		message = "The requested record is unavailable."
 	case errors.Is(err, errArcaMCPConfirmation):

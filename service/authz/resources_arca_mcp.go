@@ -1,10 +1,11 @@
 package authz
 
 var (
-	ArcaFeedbackRead     = Permission{Resource: "arca_feedback", Action: ActionRead}
-	ArcaFeedbackWrite    = Permission{Resource: "arca_feedback", Action: ActionWrite}
-	ArcaMonitoringRead   = Permission{Resource: "arca_monitoring", Action: ActionRead}
-	ArcaEntitlementsRead = Permission{Resource: "arca_entitlements", Action: ActionRead}
+	ArcaFeedbackRead      = Permission{Resource: "arca_feedback", Action: ActionRead}
+	ArcaFeedbackWrite     = Permission{Resource: "arca_feedback", Action: ActionWrite}
+	ArcaMonitoringRead    = Permission{Resource: "arca_monitoring", Action: ActionRead}
+	ArcaEntitlementsRead  = Permission{Resource: "arca_entitlements", Action: ActionRead}
+	ArcaEntitlementsWrite = Permission{Resource: "arca_entitlements", Action: ActionWrite}
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 		LabelKey: "Arca Entitlements",
 		Actions: []ActionDefinition{
 			{Action: ActionRead, LabelKey: "View", DescriptionKey: "Preview model access and usage limits in Arca MCP."},
+			{Action: ActionWrite, LabelKey: "Edit", DescriptionKey: "Assign or clear Arca subscriptions after confirmation."},
 		},
 	})
 }

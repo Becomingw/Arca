@@ -26,9 +26,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 export function ArcaMcpCard() {
   const { t } = useTranslation()
+  const canManageSubscriptions = useAuthStore(
+    (state) => state.auth.user?.role === ROLE.SUPER_ADMIN
+  )
   const endpoint = new URL('/mcp', window.location.origin).href
 
   return (
@@ -46,9 +51,16 @@ export function ArcaMcpCard() {
         </div>
         <p className='text-muted-foreground text-sm'>
           {t(
-            'Create an access token above and grant only the Arca feedback, request diagnostics, or entitlement permissions your agent needs.'
+            'Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.'
           )}
         </p>
+        {canManageSubscriptions && (
+          <p className='text-muted-foreground text-sm'>
+            {t(
+              'Subscription changes require entitlement write access and a confirmed preview.'
+            )}
+          </p>
+        )}
       </CardContent>
     </Card>
   )

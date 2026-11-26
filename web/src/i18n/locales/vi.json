@@ -8091,6 +8091,15 @@
     "Inspect requests, errors, and usage details": "Inspect requests, errors, and usage details",
     "Manage API keys and view routing and service health.": "Manage API keys and view routing and service health.",
     "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances.",
-    "Manage API keys, review usage, and check your model access.": "Quản lý khóa API, xem mức sử dụng và kiểm tra quyền truy cập mô hình."
+    "Manage API keys, review usage, and check your model access.": "Quản lý khóa API, xem mức sử dụng và kiểm tra quyền truy cập mô hình.",
+    "Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.": "Tạo mã truy cập có phạm vi ở trên. Agent có thể xem người dùng, nhóm, kênh, tuyến mô hình, hạn mức và phản hồi tùy theo quyền được cấp.",
+    "Subscription changes require entitlement write access and a confirmed preview.": "Thay đổi đăng ký cần quyền ghi quyền lợi và xác nhận bản xem trước.",
+    "Assign or clear Arca subscriptions after confirmation.": "Gán hoặc gỡ đăng ký Arca sau khi xác nhận.",
+    "Rolling 5 hours": "5 giờ luân phiên",
+    "Reserved usage": "Mức sử dụng đã giữ chỗ",
+    "No subscription quota windows apply to this key.": "Khóa này không có chu kỳ hạn mức đăng ký áp dụng.",
+    "Subscription usage will be enabled in CC Switch.": "CC Switch sẽ bật truy vấn mức sử dụng đăng ký.",
+    "Enable “Allow querying user quota” in this API key’s settings to include subscription usage.": "Bật tùy chọn cho phép truy vấn hạn mức người dùng trong cài đặt khóa API này để xem mức sử dụng đăng ký.",
+    "Subscription usage requires HTTPS or a local loopback address.": "Truy vấn mức sử dụng đăng ký yêu cầu HTTPS hoặc địa chỉ loopback nội bộ."
   }
 }

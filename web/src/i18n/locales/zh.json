@@ -8091,6 +8091,15 @@
     "Inspect requests, errors, and usage details": "查看请求、错误和用量详情",
     "Manage API keys and view routing and service health.": "管理 API 密钥，查看路由和服务状态。",
     "Your subscription controls model access and usage allowances.": "订阅决定可用模型和用量上限。",
-    "Manage API keys, review usage, and check your model access.": "管理 API 密钥、查看用量和可用模型。"
+    "Manage API keys, review usage, and check your model access.": "管理 API 密钥、查看用量和可用模型。",
+    "Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.": "在上方创建访问令牌并选择权限。Agent 可按授权查询用户、分组、渠道、模型路由、用量权益和反馈。",
+    "Subscription changes require entitlement write access and a confirmed preview.": "调整订阅需要权益写入权限，并确认预览中的变更。",
+    "Assign or clear Arca subscriptions after confirmation.": "确认后分配或清除 Arca 订阅。",
+    "Rolling 5 hours": "滚动 5 小时",
+    "Reserved usage": "已预留用量",
+    "No subscription quota windows apply to this key.": "这把密钥没有适用的订阅额度窗口。",
+    "Subscription usage will be enabled in CC Switch.": "CC Switch 将启用订阅用量查询。",
+    "Enable “Allow querying user quota” in this API key’s settings to include subscription usage.": "在此 API 密钥的设置中开启「允许查询用户额度」，即可导入订阅用量查询。",
+    "Subscription usage requires HTTPS or a local loopback address.": "订阅用量查询需要 HTTPS 或本机回环地址。"
   }
 }

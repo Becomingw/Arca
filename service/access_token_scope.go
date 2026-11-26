@@ -126,6 +126,9 @@ func AccessTokenCatalog(userID, role int) []AccessTokenCatalogGroup {
 	if role >= common.RoleAdminUser {
 		for _, definition := range authz.Catalog() {
 			resource := AccessTokenResource{Resource: definition.Resource, LabelKey: definition.LabelKey}
+			if resource.Resource == authz.ArcaEntitlementsRead.Resource && role != common.RoleRootUser {
+				continue
+			}
 			for _, action := range definition.Actions {
 				if authz.Can(userID, role, authz.Permission{Resource: definition.Resource, Action: action.Action}) {
 					resource.Actions = append(resource.Actions, action)

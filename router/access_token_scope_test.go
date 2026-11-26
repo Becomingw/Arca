@@ -61,6 +61,7 @@ var accessTokenExemptRoutes = []string{
 	"POST /api/user/auth/logout",
 
 	// Relay API key authentication.
+	"GET /api/ccswitch/usage",
 	"GET /api/opencode/config",
 	"GET /api/usage/token/",
 	"GET /api/log/token",

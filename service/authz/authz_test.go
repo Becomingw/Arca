@@ -160,7 +160,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 		ResourceAudit:                 {ActionRead: false},
 		ArcaFeedbackRead.Resource:     {ActionRead: true, ActionWrite: false},
 		ArcaMonitoringRead.Resource:   {ActionRead: false},
-		ArcaEntitlementsRead.Resource: {ActionRead: false},
+		ArcaEntitlementsRead.Resource: {ActionRead: false, ActionWrite: false},
 	}, ExplicitUserPermissions(42))
 	assert.Equal(t, PermissionsMap{
 		ResourceChannel: {
@@ -195,7 +195,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 		ResourceAudit:                 {ActionRead: false},
 		ArcaFeedbackRead.Resource:     {ActionRead: true, ActionWrite: false},
 		ArcaMonitoringRead.Resource:   {ActionRead: false},
-		ArcaEntitlementsRead.Resource: {ActionRead: false},
+		ArcaEntitlementsRead.Resource: {ActionRead: false, ActionWrite: false},
 	}, ExplicitUserPermissions(42))
 	assert.Empty(t, ExplicitUserOverrides(42))
 }

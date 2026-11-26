@@ -8091,6 +8091,15 @@
     "Inspect requests, errors, and usage details": "Inspect requests, errors, and usage details",
     "Manage API keys and view routing and service health.": "Manage API keys and view routing and service health.",
     "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances.",
-    "Manage API keys, review usage, and check your model access.": "Управляйте ключами API, проверяйте использование и доступ к моделям."
+    "Manage API keys, review usage, and check your model access.": "Управляйте ключами API, проверяйте использование и доступ к моделям.",
+    "Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.": "Создайте токен с нужными правами выше. Агенты смогут просматривать пользователей, группы, каналы, маршруты моделей, лимиты и отзывы в пределах этих прав.",
+    "Subscription changes require entitlement write access and a confirmed preview.": "Изменение подписок требует права записи и подтверждения предварительного просмотра.",
+    "Assign or clear Arca subscriptions after confirmation.": "Назначать или отменять подписки Arca после подтверждения.",
+    "Rolling 5 hours": "Скользящие 5 часов",
+    "Reserved usage": "Зарезервировано",
+    "No subscription quota windows apply to this key.": "Для этого ключа нет действующих периодов квоты подписки.",
+    "Subscription usage will be enabled in CC Switch.": "В CC Switch будет включена проверка использования подписки.",
+    "Enable “Allow querying user quota” in this API key’s settings to include subscription usage.": "Разрешите проверку квоты пользователя в настройках этого ключа API, чтобы отображать использование подписки.",
+    "Subscription usage requires HTTPS or a local loopback address.": "Для проверки использования подписки нужен HTTPS или локальный адрес обратной связи."
   }
 }

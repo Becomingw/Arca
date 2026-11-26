@@ -1,6 +1,8 @@
 package model
 
 import (
+	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 type Token struct {
@@ -302,6 +306,22 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		}
 	}
 	return token, nil
+}
+
+// GetTokenForSubscriptionUsage reads current permission and expiry metadata
+// without populating the relay cache or logging the presented credential.
+func GetTokenForSubscriptionUsage(ctx context.Context, key string) (*Token, error) {
+	var token Token
+	err := DB.WithContext(ctx).Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where(clause.Eq{Column: clause.Column{Name: "key"}, Value: key}).Take(&token).Error
+	if err != nil {
+		return nil, err
+	}
+	// Deployment collations may compare database strings case-insensitively.
+	if subtle.ConstantTimeCompare([]byte(token.Key), []byte(key)) != 1 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &token, nil
 }
 
 func (token *Token) Insert() error {

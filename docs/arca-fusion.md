@@ -28,6 +28,7 @@ The normal Docker and release builds produce the same frontend. Use isolated dat
 | Managed subscriptions, model families and budget policy | `/entitlements` for the root role, with a personal summary in the workspace and profile |
 | Temporary usage grants | Administrator codes at `/redemption-codes` and member redemption at `/profile` |
 | OpenCode and CC Switch client setup | Native API key actions at `/keys` |
+| CC Switch subscription usage | Key-authorized `GET /api/ccswitch/usage`, attached to eligible CC Switch imports |
 | Linux and macOS setup | The API key screen and `GET /api/opencode/setup` |
 | OpenCode Go quota monitoring | Built-in `opencode-go` provider plugin and per-credential balance display |
 | Arca MCP | Native `/security` configuration and scoped PAT authentication at `POST /mcp` |
@@ -40,9 +41,19 @@ A user-specific plan takes precedence over the plan for the user's native group.
 
 An unused code grants one account a finite amount of supplemental usage. An unrestricted grant can fund any model that account and key can already use. A scoped grant can be limited to exact aliases or to a snapshot of one model family. Code redemption deadline, optional usage dates, and usable lifetime after activation are separate controls. The gateway reserves plan capacity before a grant and prefers grants that expire earlier. Redemption, reservation, and settlement serialize on the user's budget account.
 
-For a deployed MCP endpoint, set `ARCA_MCP_ALLOWED_HOSTS` to the gateway hostnames. The default allows loopback hosts. Browser clients also require an explicitly allowed origin. Mint PAT scopes using the New API account interface. MCP feedback writes require a preview and single-use confirmation. The tool list advertises the actions permitted for the token's current account.
-
 External mentions follow the administrator's configured New API SMTP or push preference. Configure the public address so notification links resolve to the gateway. `ARCA_FEEDBACK_DELIVERY_ENABLED` controls delivery. For an optional ServerChan recipient, set `ARCA_FEEDBACK_SERVERCHAN_USER_ID` and supply `ARCA_FEEDBACK_SERVERCHAN_SENDKEY` through deployment secrets.
+
+## CC Switch subscription usage
+
+Open the key's CC Switch import action at `/keys`. The key's user quota query setting controls access to the subscription view. CC Switch queries the gateway with that inference key and shows its owner's effective subscription, its applicable windows, and temporary usage grants on separate lines. Imports enable 30-minute refresh. Calendar windows carry their actual reset dates. The five-hour window rolls as earlier usage ages out. Configure a same-origin HTTPS endpoint for team access. Exact loopback HTTP addresses support local and SSH-forwarded previews.
+
+## Agent operations
+
+Connect an MCP client to `POST /mcp` with a scoped access token created at `/security`. For a deployed endpoint, set `ARCA_MCP_ALLOWED_HOSTS` to the gateway hostnames. The default allows loopback hosts. Browser clients also require an explicitly allowed origin. The tool list reflects the token's scopes and the current role of its owner.
+
+Agent reads include member and group lookups, subscription plans, a member's effective usage allowances, channel status and model routing, plus request diagnostics and feedback. Subscription assignment and clearing require a superadministrator token with entitlement write access. Preview the exact target and change before confirming the current policy version with the single-use confirmation. Feedback writes use the same preview and confirmation workflow.
+
+Use `arca_subscription_plans_list` for plan IDs and the policy version. In `arca_subscription_assign`, include `expected_version`, `subject_type`, the matching `user_id` or `group`, and `plan_id`. An empty plan ID clears the direct assignment. Resubmit the same body with `dry_run: false` and the confirmation from the preview. A concurrent policy change requires a new preview.
 
 ## Current release boundaries
 

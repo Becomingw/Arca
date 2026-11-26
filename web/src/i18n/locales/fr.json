@@ -8091,6 +8091,15 @@
     "Inspect requests, errors, and usage details": "Inspect requests, errors, and usage details",
     "Manage API keys and view routing and service health.": "Manage API keys and view routing and service health.",
     "Your subscription controls model access and usage allowances.": "Your subscription controls model access and usage allowances.",
-    "Manage API keys, review usage, and check your model access.": "Gérez vos clés API, consultez votre utilisation et vérifiez votre accès aux modèles."
+    "Manage API keys, review usage, and check your model access.": "Gérez vos clés API, consultez votre utilisation et vérifiez votre accès aux modèles.",
+    "Create a scoped access token above. Agents can inspect users, groups, channels, model routes, usage allowances, and feedback according to their permissions.": "Créez un jeton d’accès avec les autorisations requises. Les agents peuvent consulter les utilisateurs, groupes, canaux, routes de modèles, quotas et retours selon leurs droits.",
+    "Subscription changes require entitlement write access and a confirmed preview.": "La modification des abonnements requiert un droit d’écriture sur les droits d’accès et la confirmation de l’aperçu.",
+    "Assign or clear Arca subscriptions after confirmation.": "Attribuer ou retirer les abonnements Arca après confirmation.",
+    "Rolling 5 hours": "5 heures glissantes",
+    "Reserved usage": "Usage réservé",
+    "No subscription quota windows apply to this key.": "Aucune période de quota ne s’applique à cette clé.",
+    "Subscription usage will be enabled in CC Switch.": "La consultation de l’usage de l’abonnement sera activée dans CC Switch.",
+    "Enable “Allow querying user quota” in this API key’s settings to include subscription usage.": "Activez « Autoriser la consultation du quota utilisateur » dans les paramètres de cette clé API pour afficher l’usage de l’abonnement.",
+    "Subscription usage requires HTTPS or a local loopback address.": "La consultation de l’usage de l’abonnement nécessite HTTPS ou une adresse de bouclage locale."
   }
 }
