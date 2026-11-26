@@ -141,11 +141,11 @@ export type TaskPluginOption = {
 export async function getTaskPluginOptions(): Promise<TaskPluginOption[]> {
   const response = await api.get<{
     success: boolean
-    data: TaskPluginOption[]
+    data: (Omit<TaskPluginOption, 'models'> & { models?: string[] | null })[]
   }>('/api/task_plugin_options')
-  return (requireServerSuccess(response.data).data ?? []).filter(
-    (option) => option.task !== false || option.provider === true
-  )
+  return (requireServerSuccess(response.data).data ?? [])
+    .filter((option) => option.task !== false || option.provider === true)
+    .map((option) => ({ ...option, models: option.models ?? [] }))
 }
 
 export type CodexUsageResponse = {

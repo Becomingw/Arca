@@ -56,7 +56,9 @@ import { ChannelMutateDrawer } from '../drawers/channel-mutate-drawer'
 const originalAuth = useAuthStore.getState().auth
 let client: QueryClient
 let editingChannel: Channel
-let pluginOptions: TaskPluginOption[]
+let pluginOptions: Array<
+  Omit<TaskPluginOption, 'models'> & { models?: string[] | null }
+>
 let requestPluginInstances: RequestPluginInstance[]
 const plugins: TaskPluginOption[] = [
   {
@@ -603,6 +605,33 @@ test('a hidden creation drawer does not request plugin options', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Open channel' }))
   expect(await screen.findByRole('option', { name: /Video A/ })).toBeVisible()
 })
+
+test.each([null, undefined])(
+  'can open the creation drawer and select a provider with %s model metadata',
+  async (models) => {
+    pluginOptions = [
+      ...plugins,
+      {
+        key: 'opencode-go',
+        name: 'OpenCode Go',
+        baseUrl: 'https://opencode.ai',
+        models,
+        task: false,
+        provider: true,
+      },
+    ]
+    const user = userEvent.setup()
+    render(<ConfigurationHarness initialOpen={false} />)
+
+    await user.click(screen.getByRole('button', { name: 'Open channel' }))
+    const provider = await screen.findByRole('option', {
+      name: 'OpenCode Go Plugin opencode-go',
+    })
+    expect(screen.getByRole('option', { name: /^OpenAI / })).toBeVisible()
+    await user.click(provider)
+    expect(await screen.findByDisplayValue('https://opencode.ai')).toBeVisible()
+  }
+)
 
 test('configuration navigation retains its height when the form content overflows', async () => {
   render(<ConfigurationHarness />)
