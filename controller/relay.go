@@ -216,6 +216,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = billingErr
 			break
 		}
+		if billingErr := relay.RefreshArcaSelectedGroup(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
+		}
 
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
@@ -246,6 +250,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			service.MarkRequestPolicySuccess(c, relayInfo.StreamStatus)
+			if service.RequestPolicy(c).Successful && c.GetInt("token_id") != 0 {
+				if err := model.RecordArcaActivity(c.Request.Context(), relayInfo.UserId, relayInfo.StartTime.Unix()); err != nil {
+					logger.LogError(c, common.LogText("record Arca activity: %T", err))
+				}
+			}
 			relayInfo.LastError = nil
 			return
 		}
@@ -614,9 +623,12 @@ func executeTaskSubmissionWith(
 	defer func() {
 		// The client of a relayed event stream already holds the vendor's
 		// work, so the submission is billed instead of refunded.
-		if !durable && relayInfo.Billing != nil && !c.Writer.Written() {
-			diagnostics.refund(stage)
-			relayInfo.Billing.Refund(c)
+		if !durable && !c.Writer.Written() {
+			if relayInfo.Billing != nil {
+				diagnostics.refund(stage)
+				relayInfo.Billing.Refund(c)
+			}
+			service.ReleaseArcaFreeBudget(relayInfo)
 		}
 	}()
 	stage = "before_attempt"
@@ -792,6 +804,13 @@ func executeTaskSubmissionWith(
 	stage = "insert"
 	task := model.InitTask(result.Platform, relayInfo)
 	task.PrivateData.Execution = service.TaskExecutionSnapshotFromContext(c)
+	task.PrivateData.ArcaBudgetTracked = service.HasArcaBudgetReservation(relayInfo)
+	if task.PrivateData.ArcaBudgetTracked {
+		if task.PrivateData.Execution == nil {
+			task.PrivateData.Execution = &model.TaskExecutionSnapshot{}
+		}
+		task.PrivateData.Execution.RequestID = relayInfo.RequestId
+	}
 	task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
 	task.PrivateData.BillingSource = relayInfo.BillingSource
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId

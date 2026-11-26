@@ -23,6 +23,15 @@ type FundingSource interface {
 	Refund() error
 }
 
+// organizationFunding leaves wallet and subscription balances unchanged.
+// BillingSession still enforces token quota and the organization's ledger.
+type organizationFunding struct{}
+
+func (organizationFunding) Source() string       { return BillingSourceOrganization }
+func (organizationFunding) PreConsume(int) error { return nil }
+func (organizationFunding) Settle(int) error     { return nil }
+func (organizationFunding) Refund() error        { return nil }
+
 // ---------------------------------------------------------------------------
 // WalletFunding — 钱包资金来源实现
 // ---------------------------------------------------------------------------

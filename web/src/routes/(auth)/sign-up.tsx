@@ -26,9 +26,9 @@ export const Route = createFileRoute('/(auth)/sign-up')({
   beforeLoad: async () => {
     const { auth } = useAuthStore.getState()
 
-    // 如果已经有用户信息，说明已登录，注册页对其无意义，跳转到 dashboard
+    // 如果已经有用户信息，说明已登录，注册页对其无意义，跳转到个人工作台
     if (auth.user) {
-      throw redirect({ to: '/dashboard' })
+      throw redirect({ to: '/workspace' })
     }
   },
 })

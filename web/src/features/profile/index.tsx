@@ -21,14 +21,17 @@ import {
   CardStaggerContainer,
   CardStaggerItem,
 } from '@/components/page-transition'
+import { PersonalEntitlementsCard } from '@/features/entitlements/components/personal-entitlements-card'
 import { useStatus } from '@/hooks/use-status'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { ArcaAppearanceCard } from './components/arca-appearance-card'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
 import { LanguagePreferencesCard } from './components/language-preferences-card'
 import { ProfileHeader } from './components/profile-header'
 import { ProfileSettingsCard } from './components/profile-settings-card'
 import { SidebarModulesCard } from './components/sidebar-modules-card'
+import { TokenHeatmapCard } from './components/token-heatmap-card'
 import { useProfile } from './hooks'
 
 export function Profile() {
@@ -64,6 +67,8 @@ export function Profile() {
                   quotaRemindEnabled={quotaRemindEnabled}
                   quotaRemindThreshold={quotaRemindThreshold}
                 />
+                <TokenHeatmapCard />
+                <PersonalEntitlementsCard />
                 <LanguagePreferencesCard
                   profile={profile}
                   onProfileUpdate={refreshProfile}
@@ -71,6 +76,7 @@ export function Profile() {
               </div>
 
               <div className='space-y-4 sm:space-y-6 xl:sticky xl:top-6'>
+                <ArcaAppearanceCard />
                 {checkinEnabled && (
                   <CheckinCalendarCard
                     checkinEnabled={checkinEnabled}

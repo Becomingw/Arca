@@ -41,6 +41,7 @@ declare module 'axios' {
     authRetry?: boolean
     acceptAuthRotation?: boolean
     singleUseAuthorization?: boolean
+    requestSessionID?: string | null
   }
 }
 
@@ -74,6 +75,16 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
   return request
 }) as typeof api.get
 
+function assertRequestSession(config: ApiRequestConfig) {
+  if (
+    config.requestSessionID !== undefined &&
+    config.requestSessionID !==
+      (useAuthStore.getState().auth.session?.sid ?? null)
+  ) {
+    throw new axios.CanceledError('Authentication session changed')
+  }
+}
+
 function redirectToSignIn(): void {
   if (
     typeof window !== 'undefined' &&
@@ -101,6 +112,7 @@ api.interceptors.response.use(
         config.authRetry = true
         const outcome = await refreshAuthentication()
         if (outcome.kind === 'authenticated') {
+          assertRequestSession(config)
           const token = useAuthStore.getState().auth.accessToken
           if (token) {
             config.headers = {
@@ -145,22 +157,30 @@ api.interceptors.response.use(
 )
 
 api.interceptors.request.use(async (config) => {
+  const auth = useAuthStore.getState().auth
+  if (!['get', 'head', 'options'].includes(config.method ?? 'get')) {
+    // A refresh can adopt a different login after another tab switches users.
+    // A pending write must stay with the session that initiated it.
+    if (config.requestSessionID === undefined) {
+      config.requestSessionID = auth.session?.sid ?? null
+    }
+    assertRequestSession(config)
+  }
+
   if (config.singleUseAuthorization || config.headers.has('X-Security-Proof')) {
     // Refresh before spending a proof/flow, never by replaying its request.
     config.skipAuthRefresh = true
-    try {
-      const headers = await getFreshAuthHeaders()
-      for (const [name, value] of Object.entries(headers)) {
-        config.headers.set(name, value)
-      }
-    } catch (error) {
+    const headers = await getFreshAuthHeaders().catch((error) => {
       throw axios.AxiosError.from(error, undefined, config)
+    })
+    assertRequestSession(config)
+    for (const [name, value] of Object.entries(headers)) {
+      config.headers.set(name, value)
     }
     return config
   }
-  const accessToken = useAuthStore.getState().auth.accessToken
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
+  if (auth.accessToken) {
+    config.headers.Authorization = `Bearer ${auth.accessToken}`
   }
   return config
 })

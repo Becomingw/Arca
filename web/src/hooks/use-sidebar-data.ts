@@ -20,6 +20,7 @@ import {
   Activity,
   Box,
   ClipboardList,
+  Building2,
   CreditCard,
   FileText,
   FlaskConical,
@@ -75,14 +76,21 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
         title: t('General'),
         items: [
           {
-            title: t('Overview'),
-            url: '/dashboard/overview',
-            icon: Activity,
+            title: t('Workspace'),
+            url: '/workspace',
+            icon: LayoutDashboard,
           },
           {
-            title: t('Dashboard'),
-            url: '/dashboard/models',
-            icon: LayoutDashboard,
+            title: t('feedback.title', {
+              defaultValue: 'Discussions & feedback',
+            }),
+            url: '/feedback',
+            icon: MessageSquare,
+          },
+          {
+            title: t('Team Activity'),
+            url: '/team-activity',
+            icon: Users,
           },
           {
             title: t('API Keys'),
@@ -133,6 +141,17 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
         id: 'admin',
         title: t('Admin'),
         items: [
+          {
+            title: t('Dashboard'),
+            url: '/dashboard/overview',
+            icon: Activity,
+          },
+          {
+            title: t('Organization & Entitlements'),
+            url: '/entitlements',
+            icon: Building2,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
           {
             title: t('Channels'),
             url: '/channels',

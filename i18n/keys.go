@@ -90,6 +90,12 @@ const (
 	MsgSecurityEventWeChatLinked         = "email.security_event.wechat_linked"
 )
 
+// Arca feedback notices use the recipient's preferred language.
+const (
+	MsgArcaFeedbackMentionTitle   = "arca.feedback_mention_title"
+	MsgArcaFeedbackMentionContent = "arca.feedback_mention_content"
+)
+
 // Low-quota notices, in the recipient's saved language
 const (
 	MsgNotifyQuotaLowTitle             = "notify.quota_low_title"

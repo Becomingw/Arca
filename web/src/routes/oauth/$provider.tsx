@@ -33,7 +33,11 @@ import {
   OAUTH_POPUP_RESULT_MESSAGE,
 } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
-import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
+import {
+  DEFAULT_AUTH_DESTINATION,
+  authRedirectOptions,
+  sanitizeAuthRedirect,
+} from '@/features/auth/lib/auth-redirect'
 import {
   parseTelegramBindCallback,
   postTelegramBindResult,
@@ -191,10 +195,13 @@ function OAuthCallback() {
       }
     }
 
-    const safeNavigate = (target: unknown, fallback = '/dashboard') => {
+    const safeNavigate = (
+      target: unknown,
+      fallback = DEFAULT_AUTH_DESTINATION
+    ) => {
       const href =
         sanitizeAuthRedirect(target, window.location.origin) ?? fallback
-      void navigate({ href, replace: true })
+      void navigate(authRedirectOptions(href))
     }
 
     if (!code && !search.error) {

@@ -81,6 +81,20 @@ describe('legacy frontend route migration', () => {
     )
   })
 
+  test('migrates former Arca bookmarks to authenticated native routes', () => {
+    const topic = '33c63e08-843b-4bbf-b7dc-49924aa335a0'
+    expect(resolveLegacyRoute('/arca/')).toBe('/workspace')
+    expect(resolveLegacyRoute('/arca/#profile')).toBe('/profile')
+    expect(resolveLegacyRoute(`/arca/index.html#feedback/${topic}`)).toBe(
+      `/feedback?topic=${topic}`
+    )
+    expect(resolveLegacyRoute('/arca/#agent')).toBe('/security')
+    expect(resolveLegacyRoute(`/arca/?source=email#feedback/${topic}`)).toBe(
+      `/feedback?source=email&topic=${topic}`
+    )
+    expect(resolveLegacyRoute('/arca/#feedback/..%2Fsign-in')).toBe('/feedback')
+  })
+
   test('safely redirects unknown console locations without touching new routes', () => {
     expect(resolveLegacyRoute('/console/removed?page=2#old')).toBe(
       '/dashboard?page=2#old'

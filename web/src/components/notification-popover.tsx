@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
-import { Bell, Megaphone } from 'lucide-react'
+import { Bell, Megaphone, MessageSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { RichContent } from '@/components/rich-content'
@@ -40,6 +40,9 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useFeedbackSession } from '@/features/feedback/api'
+import { FeedbackNotificationList } from '@/features/feedback/notifications'
+import type { NotificationTab } from '@/hooks/use-notifications'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -56,8 +59,8 @@ interface NotificationPopoverProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   unreadCount: number
-  activeTab: 'notice' | 'announcements'
-  onTabChange: (tab: 'notice' | 'announcements') => void
+  activeTab: NotificationTab
+  onTabChange: (tab: NotificationTab) => void
   notice: string
   announcements: AnnouncementItem[]
   loading: boolean
@@ -302,6 +305,7 @@ export function NotificationPopover({
   className,
 }: NotificationPopoverProps) {
   const { t } = useTranslation()
+  const feedbackSession = useFeedbackSession()
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
@@ -331,17 +335,27 @@ export function NotificationPopover({
         className='w-[min(26rem,calc(100vw-1rem))] gap-3 p-3'
       >
         <PopoverHeader className='gap-1 px-1'>
-          <PopoverTitle>{t('System Announcements')}</PopoverTitle>
-          <p className='text-muted-foreground text-xs'>
-            {t('Latest platform updates and notices')}
-          </p>
+          <PopoverTitle>{t('Notifications')}</PopoverTitle>
         </PopoverHeader>
 
         <Tabs
           value={activeTab}
-          onValueChange={onTabChange as (value: string) => void}
+          onValueChange={(value) => {
+            if (
+              value === 'notice' ||
+              value === 'announcements' ||
+              (value === 'feedback' && feedbackSession)
+            ) {
+              onTabChange(value)
+            }
+          }}
         >
-          <TabsList className='grid w-full grid-cols-2'>
+          <TabsList
+            className={cn(
+              'grid w-full',
+              feedbackSession ? 'grid-cols-3' : 'grid-cols-2'
+            )}
+          >
             <TabsTrigger value='notice' className='gap-1.5'>
               <Bell className='size-3.5' />
               {t('Notice')}
@@ -350,6 +364,12 @@ export function NotificationPopover({
               <Megaphone className='size-3.5' />
               {t('Timeline')}
             </TabsTrigger>
+            {feedbackSession && (
+              <TabsTrigger value='feedback' className='gap-1.5'>
+                <MessageSquare className='size-3.5' />
+                {t('feedback.inboxTab', { defaultValue: 'Discussions' })}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value='notice' className='mt-2'>
@@ -363,6 +383,13 @@ export function NotificationPopover({
               t={t}
             />
           </TabsContent>
+          {feedbackSession && (
+            <TabsContent value='feedback' className='mt-2'>
+              <FeedbackNotificationList
+                onNavigate={() => onOpenChange(false)}
+              />
+            </TabsContent>
+          )}
         </Tabs>
 
         <div className='flex justify-end'>

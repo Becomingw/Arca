@@ -341,6 +341,8 @@ func InitResources() error {
 		return err
 	}
 	// Before the loads below: a write made while they run is reloaded later.
+	model.EnableArcaActivity()
+	model.EnableArcaEntitlementRuntime()
 	service.ReadStartupSyncRevisions()
 	if err = authz.Init(model.DB); err != nil {
 		common.FatalLog(common.LogText("failed to initialize authorization: %s", err.Error()))

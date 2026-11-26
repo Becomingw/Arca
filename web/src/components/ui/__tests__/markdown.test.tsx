@@ -66,3 +66,19 @@ test('does not load math resources when trust is inherited from a polluted proto
     }
   }
 })
+
+test('keeps discussion markdown readable without rendering raw HTML or remote images', () => {
+  const view = render(
+    <Markdown untrusted>
+      {
+        '**Observation.** ![Tracking pixel](https://example.com/pixel.png)\n\n<form><input name="other-account" /></form>'
+      }
+    </Markdown>
+  )
+
+  expect(view.container.querySelector('strong')).toHaveTextContent(
+    'Observation.'
+  )
+  expect(view.container).toHaveTextContent('Tracking pixel')
+  expect(view.container.querySelector('img, form, input')).toBeNull()
+})

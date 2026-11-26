@@ -98,6 +98,18 @@ export function SidebarModulesSection({
       },
     },
     console: {
+      workspace: {
+        title: t('Workspace'),
+        description: t('Available Models'),
+      },
+      feedback: {
+        title: t('feedback.title', { defaultValue: 'Discussions & feedback' }),
+        description: t('Discuss requests and report issues.'),
+      },
+      team_activity: {
+        title: t('Team Activity'),
+        description: t('View team activity estimates.'),
+      },
       detail: {
         title: t('Dashboard'),
         description: t('Aggregated usage metrics and trend charts.'),
@@ -138,6 +150,10 @@ export function SidebarModulesSection({
       },
     },
     admin: {
+      entitlements: {
+        title: t('Organization & Entitlements'),
+        description: t('Manage organizations, model families, and budgets.'),
+      },
       channel: {
         title: t('Channels'),
         description: t('Configure upstream providers and routing.'),

@@ -25,7 +25,7 @@ import { isSidebarModuleEnabled } from '@/lib/nav-modules'
 export const Route = createFileRoute('/_authenticated/playground/')({
   beforeLoad: () => {
     if (!isSidebarModuleEnabled('chat', 'playground')) {
-      throw redirect({ to: '/dashboard' })
+      throw redirect({ to: '/workspace' })
     }
   },
   component: PlaygroundPage,

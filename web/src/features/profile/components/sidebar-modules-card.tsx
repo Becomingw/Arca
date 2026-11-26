@@ -83,6 +83,23 @@ export function SidebarModulesCard() {
       description: t('Data management and log viewing'),
       modules: [
         {
+          key: 'workspace',
+          title: t('Workspace'),
+          description: t('Available Models'),
+        },
+        {
+          key: 'feedback',
+          title: t('feedback.title', {
+            defaultValue: 'Discussions & feedback',
+          }),
+          description: t('Discuss requests and report issues.'),
+        },
+        {
+          key: 'team_activity',
+          title: t('Team Activity'),
+          description: t('View team activity estimates.'),
+        },
+        {
           key: 'detail',
           title: t('Dashboard'),
           description: t('System data statistics'),

@@ -454,6 +454,8 @@ var (
 // decided at admission.
 var reservedRouteNamespaces = []string{
 	"/assets",
+	"/brand",
+	"/arca",
 	"/setup",
 	"/v1/tasks",
 	"/console",
@@ -482,6 +484,8 @@ var reservedRouteNamespaces = []string{
 	"/channels",
 	"/chat",
 	"/dashboard",
+	"/entitlements",
+	"/feedback",
 	"/errors",
 	"/keys",
 	"/models",
@@ -493,9 +497,11 @@ var reservedRouteNamespaces = []string{
 	"/subscriptions",
 	"/system-info",
 	"/task-plugins",
+	"/team-activity",
 	"/usage-logs",
 	"/users",
 	"/wallet",
+	"/workspace",
 }
 
 func (g *RoutingGeneration) Get(key string) (*LoadedPlugin, bool) {

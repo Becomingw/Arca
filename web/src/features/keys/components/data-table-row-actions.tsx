@@ -24,6 +24,7 @@ import {
   PowerOff,
   ExternalLink,
   ArrowRightLeft,
+  Download,
   Copy,
   Link,
   Loader2,
@@ -53,9 +54,11 @@ import { sendToFluent } from '@/features/chat/lib/send-to-fluent'
 import { encodeChannelConnectionInfo } from '@/lib/channel-connection-info'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { handleServerError } from '@/lib/handle-server-error'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import { downloadOpenCodeConfig } from '../opencode'
 import { apiKeySchema } from '../types'
 import { useApiKeys } from './api-keys-provider'
 
@@ -92,6 +95,7 @@ export function DataTableRowActions<TData>({
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
 
   const hasChatPresets = chatPresets.length > 0
@@ -265,6 +269,35 @@ export function DataTableRowActions<TData>({
           {t('CC Switch')}
           <DropdownMenuShortcut>
             <ArrowRightLeft size={16} />
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!isEnabled || isExporting || isRealKeyLoading}
+          onClick={async () => {
+            setIsExporting(true)
+            const sessionId = useAuthStore.getState().auth.session?.sid
+            try {
+              const key = await resolveRealKey(apiKey.id)
+              if (
+                key &&
+                useAuthStore.getState().auth.session?.sid === sessionId
+              ) {
+                await downloadOpenCodeConfig(key)
+              }
+            } catch {
+              toast.error(
+                t(
+                  'Failed to download OpenCode configuration. Check the gateway URL and API key permissions.'
+                )
+              )
+            } finally {
+              setIsExporting(false)
+            }
+          }}
+        >
+          {t('Download OpenCode configuration')}
+          <DropdownMenuShortcut>
+            <Download size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
         {hasChatPresets && (

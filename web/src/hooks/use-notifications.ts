@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 
+import { useFeedbackNotifications } from '@/features/feedback/use-feedback-notifications'
 import { useStatus } from '@/hooks/use-status'
 import { getNotice } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
@@ -63,11 +64,14 @@ function getAnnouncementKey(item: Record<string, unknown>): string {
  * Hook to manage notifications (Notice + Announcements)
  * Provides unread counts and read status management
  */
+export type NotificationTab = 'notice' | 'announcements' | 'feedback'
+
 export function useNotifications() {
+  const feedback = useFeedbackNotifications()
   const [popoverOpen, setPopoverOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'notice' | 'announcements'>(
-    'notice'
-  )
+  const [selectedTab, setActiveTab] = useState<NotificationTab>('notice')
+  const activeTab =
+    selectedTab === 'feedback' && !feedback.session ? 'notice' : selectedTab
 
   // Fetch Notice from API
   const {
@@ -133,11 +137,11 @@ export function useNotifications() {
   }
 
   // Handle popover open
-  const handleOpenPopover = (tab?: 'notice' | 'announcements') => {
+  const handleOpenPopover = (tab?: NotificationTab) => {
     const nextTab = tab || activeTab
 
     // Mark currently visible content as read when opening the notification center
-    if (noticeContent) {
+    if (nextTab === 'notice' && noticeContent) {
       markNoticeRead(noticeContent)
     }
     if (nextTab === 'announcements') {
@@ -158,9 +162,12 @@ export function useNotifications() {
   }
 
   // Handle tab change - mark announcements as read when switching to that tab
-  const handleTabChange = (tab: 'notice' | 'announcements') => {
+  const handleTabChange = (tab: NotificationTab) => {
     setActiveTab(tab)
 
+    if (tab === 'notice' && noticeContent) {
+      markNoticeRead(noticeContent)
+    }
     if (tab === 'announcements') {
       markAnnouncementsAsRead()
     }
@@ -173,7 +180,7 @@ export function useNotifications() {
     loading: noticeLoading || statusLoading,
 
     // Unread counts
-    unreadCount: unreadCounts.total,
+    unreadCount: unreadCounts.total + feedback.unreadCount,
     unreadNoticeCount: unreadCounts.notice,
     unreadAnnouncementsCount: unreadCounts.announcements,
 

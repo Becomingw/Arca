@@ -33,6 +33,8 @@ beforeEach(() => {
 
 afterEach(() => {
   queryClient.clear()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 function renderDialog(models = ['gpt-5.4', 'claude-sonnet-4-6']) {
@@ -111,6 +113,68 @@ describe('CC Switch model selection', () => {
     })
     await user.click(await screen.findByRole('option', { name: 'gpt-5.4' }))
     await waitFor(() => expect(input).toHaveValue('gpt-5.4'))
+  })
+
+  it('imports an OpenCode provider using the endpoint and model authorized for the selected key', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          provider: {
+            aether: {
+              options: { baseURL: 'https://arca.example/infra/v1' },
+              models: { 'key-allowed-model': { name: 'Allowed' } },
+            },
+          },
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchCatalog)
+    const openApp = vi.spyOn(window, 'open').mockImplementation(() => null)
+    renderDialog(['profile-only-model'])
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'OpenCode' }))
+    const input = screen.getByRole('combobox', { name: 'Primary Model' })
+    await user.click(input)
+    await user.click(
+      await screen.findByRole('option', { name: 'key-allowed-model' })
+    )
+
+    expect(fetchCatalog).toHaveBeenCalledWith(
+      '/api/opencode/config',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer sk-test-only' },
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+      })
+    )
+    await user.click(screen.getByRole('button', { name: 'Open CC Switch' }))
+    expect(openApp).toHaveBeenCalledTimes(1)
+    const imported = new URL(String(openApp.mock.calls[0]?.[0]))
+    expect(imported.protocol).toBe('ccswitch:')
+    expect(imported.searchParams.get('app')).toBe('opencode')
+    expect(imported.searchParams.get('apiFormat')).toBe('openai_chat')
+    expect(imported.searchParams.get('endpoint')).toBe(
+      'https://arca.example/infra/v1'
+    )
+    expect(imported.searchParams.get('model')).toBe('key-allowed-model')
+  })
+
+  it('shows the OpenCode catalog error and prevents opening CC Switch', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    )
+    renderDialog()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'OpenCode' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to load models'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Open CC Switch' })
+    ).toBeDisabled()
   })
 
   it('lets users edit the provider name without opening a model dropdown', async () => {

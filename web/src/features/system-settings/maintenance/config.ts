@@ -62,6 +62,9 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
   console: {
     enabled: true,
     detail: true,
+    workspace: true,
+    feedback: true,
+    team_activity: true,
     token: true,
     log: true,
     audit: true,
@@ -82,6 +85,7 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
     user: true,
     setting: true,
     subscription: true,
+    entitlements: true,
   },
 }
 

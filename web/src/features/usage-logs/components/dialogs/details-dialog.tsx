@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
 import type { TFunction } from 'i18next'
 /*
 Copyright (C) 2023-2026 QuantumNous
@@ -72,6 +73,7 @@ import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { AuditDetailFields } from '../../audit/components/audit-detail-fields'
 import type { UsageLog } from '../../data/schema'
@@ -535,6 +537,7 @@ interface DetailsDialogProps {
 
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
+  const userID = useAuthStore((state) => state.auth.user?.id)
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
@@ -719,6 +722,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
               value={props.log.request_id}
               mono
             />
+          )}
+          {props.log.request_id && props.log.user_id === userID && (
+            <Button
+              variant='outline'
+              size='sm'
+              render={
+                <Link
+                  to='/feedback'
+                  search={{ requestId: props.log.request_id }}
+                  onClick={() => props.onOpenChange(false)}
+                />
+              }
+            >
+              {t('Report an issue')}
+            </Button>
           )}
           {props.log.upstream_request_id && (
             <DetailRow

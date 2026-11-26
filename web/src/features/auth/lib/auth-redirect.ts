@@ -78,3 +78,9 @@ export function sanitizeAuthRedirect(
 
   return `${redirectURL.pathname}${redirectURL.search}${redirectURL.hash}`
 }
+
+export const DEFAULT_AUTH_DESTINATION = '/workspace'
+
+export function authRedirectOptions(href: string) {
+  return { href, replace: true }
+}

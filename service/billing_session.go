@@ -30,6 +30,8 @@ import (
 type BillingSession struct {
 	relayInfo        *relaycommon.RelayInfo
 	funding          FundingSource
+	arcaBudget       *arcaRequestBudget
+	arcaFinalQuota   *int
 	preConsumedQuota int    // 实际预扣额度（信任用户可能为 0）
 	tokenConsumed    int    // 令牌额度实际扣减量
 	extraReserved    int    // 发送前补充预扣的额度（订阅退款时需要单独回滚）
@@ -47,13 +49,27 @@ type BillingSession struct {
 func (s *BillingSession) Settle(actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.arcaBudget != nil && s.arcaBudget.tracked && !s.settled && s.arcaFinalQuota == nil {
+		s.arcaFinalQuota = &actualQuota
+	}
+	// A repeated settlement retries only the secondary ledger write once
+	// native funding and token changes have completed.
+	var budgetErr error
+	if s.arcaFinalQuota != nil {
+		budgetErr = s.arcaBudget.finish(s.arcaFinalQuota)
+		if budgetErr == nil {
+			s.arcaFinalQuota = nil
+		} else {
+			common.SysError(common.LogText("failed to settle an organization budget reservation"))
+		}
+	}
 	if s.settled {
-		return nil
+		return budgetErr
 	}
 	delta := actualQuota - s.preConsumedQuota
 	if delta == 0 {
 		s.settled = true
-		return nil
+		return budgetErr
 	}
 	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
 	if !s.fundingSettled {
@@ -81,7 +97,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 	}
 	s.settled = true
-	return tokenErr
+	return errors.Join(tokenErr, budgetErr)
 }
 
 // Refund 退还所有预扣费，幂等安全，异步执行。
@@ -108,8 +124,12 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	extraReserved := s.extraReserved
 	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
+	budget := s.arcaBudget
 
 	gopool.Go(func() {
+		if err := budget.finish(nil); err != nil {
+			common.SysError(common.LogText("failed to release an organization budget reservation"))
+		}
 		// 1) 退还资金来源
 		if err := funding.Refund(); err != nil {
 			common.SysLog(common.LogText("error refunding billing source: %s", err.Error()))
@@ -140,7 +160,7 @@ func (s *BillingSession) needsRefundLocked() bool {
 		// fundingSettled 时资金来源已提交结算，不能再退预扣费
 		return false
 	}
-	if s.tokenConsumed > 0 {
+	if s.tokenConsumed > 0 || s.arcaBudget != nil {
 		return true
 	}
 	// 订阅可能在 tokenConsumed=0 时仍预扣了额度
@@ -172,7 +192,13 @@ func (s *BillingSession) reserve(targetQuota int, requireAvailableQuota bool) er
 		_, imageRequest := s.relayInfo.Request.(*dto.ImageRequest)
 		requireAvailableQuota = requireAvailableQuota || imageRequest || s.relayInfo.ImageRequestCount > 0
 	}
-	if s.settled || s.refunded || s.trusted && !requireAvailableQuota || targetQuota <= s.preConsumedQuota {
+	if s.settled || s.refunded {
+		return nil
+	}
+	if err := s.arcaBudget.reserve(targetQuota); err != nil {
+		return err
+	}
+	if s.trusted && !requireAvailableQuota || targetQuota <= s.preConsumedQuota {
 		return nil
 	}
 
@@ -263,6 +289,8 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 
 func (s *BillingSession) reserveFunding(delta int, requireAvailableQuota bool) error {
 	switch funding := s.funding.(type) {
+	case organizationFunding:
+		return nil
 	case *WalletFunding:
 		if requireAvailableQuota {
 			// Image quantities and task retry prices are known before

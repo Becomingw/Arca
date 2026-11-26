@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http/httptest"
@@ -1704,4 +1705,86 @@ func TestPostTextConsumeQuotaLogsMissingUsageAsStructuredContent(t *testing.T) {
 	assert.Equal(t, []any{
 		map[string]any{"key": "Upstream returned no usage, so nothing was charged (possibly an upstream timeout)"},
 	}, other["content_parts"])
+}
+
+func TestArcaOrganizationFundingUsesBudgetWithoutChargingWallet(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
+	oldDB, oldRedis, oldBatch, oldRate := model.DB, common.RedisEnabled, common.BatchUpdateEnabled, common.QuotaPerUnit
+	model.DB, common.RedisEnabled, common.BatchUpdateEnabled, common.QuotaPerUnit = db, false, false, 500_000
+	t.Cleanup(func() {
+		model.DB, common.RedisEnabled, common.BatchUpdateEnabled, common.QuotaPerUnit = oldDB, oldRedis, oldBatch, oldRate
+	})
+	t.Cleanup(model.EnableArcaEntitlementRuntime())
+	require.NoError(t, db.AutoMigrate(
+		&model.User{}, &model.Token{}, &model.ArcaEntitlementPolicyRow{}, &model.ArcaBudgetAccount{}, &model.ArcaBudgetReservation{},
+	))
+	user := model.User{Username: "arca-team-user", Status: common.UserStatusEnabled}
+	require.NoError(t, db.Create(&user).Error)
+	token := model.Token{UserId: user.Id, Name: "arca-budget", Key: "arca-organization-test-key", RemainQuota: 100, Status: common.TokenStatusEnabled}
+	require.NoError(t, db.Create(&token).Error)
+	policy := model.ArcaEntitlementPolicy{
+		Default: &model.ArcaAllocation{InternalFunding: true, FiveHour: new(0.000010)},
+		UserModelAccess: map[string]model.ArcaModelAccess{
+			fmt.Sprint(user.Id): {Mode: "specific", Models: []string{"team-model"}},
+		},
+	}
+	ctx := context.Background()
+	_, err = model.SaveArcaEntitlementPolicy(ctx, 0, policy)
+	require.NoError(t, err)
+	newRequest := func(id, modelName string) (*gin.Context, *relaycommon.RelayInfo) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		c.Set("id", user.Id)
+		return c, &relaycommon.RelayInfo{
+			UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, OriginModelName: modelName,
+			RequestId: id, UserSetting: dto.UserSetting{BillingPreference: "wallet_only"},
+		}
+	}
+
+	c, first := newRequest("arca-budget-request-one", "team-model")
+	require.Nil(t, CheckArcaRelayEntitlement(c, first.OriginModelName))
+	require.Nil(t, PrepareArcaFreeBilling(c, first))
+	require.Nil(t, first.Billing)
+	require.True(t, first.ArcaFreeBudget)
+	require.Nil(t, ReserveArcaSelectedGroup(c, first, 3))
+	require.Equal(t, BillingSourceOrganization, first.BillingSource)
+	require.False(t, first.ArcaFreeBudget)
+
+	duplicateContext, duplicate := newRequest(first.RequestId, first.OriginModelName)
+	replay := PrepareArcaFreeBilling(duplicateContext, duplicate)
+	require.NotNil(t, replay)
+	require.Equal(t, 409, replay.StatusCode)
+
+	c2, second := newRequest("arca-budget-request-two", "team-model")
+	err2 := PreConsumeBilling(c2, 3, second)
+	require.NotNil(t, err2)
+	require.Equal(t, types.ErrorCodeInsufficientUserQuota, err2.GetErrorCode())
+	require.NoError(t, SettleBilling(c, first, 2))
+
+	c3, forbidden := newRequest("arca-budget-request-three", "a-model-outside-the-policy")
+	denied := CheckArcaRelayEntitlement(c3, forbidden.OriginModelName)
+	require.NotNil(t, denied)
+	require.Equal(t, types.ErrorCodeAccessDenied, denied.GetErrorCode())
+	require.Nil(t, PreConsumeBilling(c2, 3, second))
+	require.NoError(t, SettleBilling(c2, second, 3))
+
+	require.NoError(t, db.First(&user, user.Id).Error)
+	require.Zero(t, user.Quota)
+	require.NoError(t, db.First(&token, token.Id).Error)
+	require.Equal(t, 95, token.RemainQuota)
+
+	loaded, _, err := model.LoadArcaEntitlementPolicy(ctx)
+	require.NoError(t, err)
+	windows, err := loaded.Windows(loaded.Effective(user.Id), "team-model", time.Now())
+	require.NoError(t, err)
+	usage, err := model.ReadArcaBudgetUsage(ctx, user.Id, windows, time.Now())
+	require.NoError(t, err)
+	require.Len(t, usage, 1)
+	require.EqualValues(t, 10, usage[0].UsedMicros)
+	require.Zero(t, usage[0].ReservedMicros)
 }

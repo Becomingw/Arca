@@ -19,6 +19,26 @@ import (
 // provide the current request body through BodyStorage or BillingRequestInput;
 // channel retries retain the resulting billing session and pricing snapshot.
 func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	meta := requestBillingMetadata(info)
+
+	tokens, err := service.EstimateRequestToken(c, meta, info)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeCountTokenFailed)
+	}
+	info.SetEstimatePromptTokens(tokens)
+
+	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+	}
+	if priceData.FreeModel {
+		logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
+		return service.PrepareArcaFreeBilling(c, info)
+	}
+	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+}
+
+func requestBillingMetadata(info *relaycommon.RelayInfo) *types.TokenCountMeta {
 	meta := &types.TokenCountMeta{TokenType: types.TokenTypeTokenizer}
 	if info.Request != nil && constant.CountToken {
 		meta = info.Request.GetTokenCountMeta()
@@ -36,21 +56,22 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 		}
 	}
 
-	tokens, err := service.EstimateRequestToken(c, meta, info)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeCountTokenFailed)
-	}
-	info.SetEstimatePromptTokens(tokens)
+	return meta
+}
 
-	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-	}
-	if priceData.FreeModel {
-		logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
+// RefreshArcaSelectedGroup recomputes a legacy quote for a selected
+// alternate group, keeping the native price snapshot and settlement unchanged.
+// Tiered requests already reprice through PrepareTieredBillingForSelectedGroup.
+func RefreshArcaSelectedGroup(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	if info.TieredBillingSnapshot != nil || !service.HasArcaBudgetReservation(info) {
 		return nil
 	}
-	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+	copyInfo := *info
+	price, err := helper.ModelPriceHelper(c, &copyInfo, info.GetEstimatePromptTokens(), requestBillingMetadata(info))
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+	}
+	return service.ReserveArcaSelectedGroup(c, info, price.QuotaToPreConsume)
 }
 
 // RefundFailedRequestBilling applies the common final-failure policy after all
@@ -63,6 +84,7 @@ func RefundFailedRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, api
 	if info.Billing != nil {
 		info.Billing.Refund(c)
 	}
+	service.ReleaseArcaFreeBudget(info)
 	service.ChargeViolationFeeIfNeeded(c, info, apiErr)
 	return apiErr
 }

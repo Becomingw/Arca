@@ -36,6 +36,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/home_page_content",
 	"GET /api/ratio_config",
 	"GET /api/user/groups",
+	"GET /api/arca/avatars/:handle",
+	"GET /api/opencode/setup",
 
 	// Anonymous account entry points.
 	"GET /api/verification",
@@ -70,7 +72,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/subscription/epay/return",
 	"POST /api/subscription/epay/return",
 
-	// API key authentication (TokenAuthReadOnly).
+	// Relay API key authentication.
+	"GET /api/opencode/config",
 	"GET /api/usage/token/",
 	"GET /api/log/token",
 }

@@ -127,7 +127,13 @@ func sweepTimedOutTasks(ctx context.Context) {
 			task.FailReason = reason
 		}
 
-		won, err := task.UpdateWithStatus(oldStatus)
+		var won bool
+		var err error
+		if !isLegacy && task.PrivateData.ArcaBudgetTracked {
+			won, err = task.UpdateWithStatusAndArcaBudget(ctx, oldStatus, nil)
+		} else {
+			won, err = task.UpdateWithStatus(oldStatus)
+		}
 		if err != nil {
 			logger.LogError(ctx, common.LogText("sweepTimedOutTasks CAS update error for task %s: %v", task.TaskID, err))
 			continue
@@ -441,7 +447,14 @@ func pollTaskBatch(ctx context.Context, adaptor BatchTaskPollingAdaptor, channel
 
 		isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 		terminalTransition := isDone && snap.Status != task.Status
-		won, updateErr := task.UpdateWithStatus(snap.Status)
+		var won bool
+		var updateErr error
+		var billingPlan *taskTerminalBillingPlan
+		if terminalTransition {
+			won, billingPlan, updateErr = updateTaskTerminalStatus(ctx, adaptor, task, &responseItem.TaskInfo, snap.Status)
+		} else {
+			won, updateErr = task.UpdateWithStatus(snap.Status)
+		}
 		if updateErr != nil {
 			common.SysLog(common.LogText("UpdateSunoTask task error: %s", updateErr.Error()))
 			continue
@@ -451,7 +464,7 @@ func pollTaskBatch(ctx context.Context, adaptor BatchTaskPollingAdaptor, channel
 			continue
 		}
 		if terminalTransition {
-			finalizeTerminalTask(ctx, adaptor, task, &responseItem.TaskInfo)
+			finalizeTerminalTask(ctx, adaptor, task, &responseItem.TaskInfo, billingPlan)
 		}
 	}
 	return nil
@@ -679,8 +692,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
+	var billingPlan *taskTerminalBillingPlan
 	if isDone && snap.Status != task.Status {
-		won, err := task.UpdateWithStatus(snap.Status)
+		var won bool
+		var err error
+		won, billingPlan, err = updateTaskTerminalStatus(ctx, adaptor, task, taskResult, snap.Status)
 		if err != nil {
 			logger.LogError(ctx, common.LogText("UpdateWithStatus failed for task %s: %s", task.TaskID, err.Error()))
 			shouldFinalizeBilling = false
@@ -698,16 +714,20 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	if shouldFinalizeBilling {
-		finalizeTerminalTask(ctx, adaptor, task, taskResult)
+		finalizeTerminalTask(ctx, adaptor, task, taskResult, billingPlan)
 	}
 
 	return nil
 }
 
 // finalizeTerminalTask 终态统一收尾（状态 CAS 赢家调用，恰好一次）：采样 + 结算 + 失败兜底退款。
-func finalizeTerminalTask(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
+func finalizeTerminalTask(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo, billingPlan *taskTerminalBillingPlan) {
 	perfmetrics.RecordTaskResult(task, taskResult)
-	billingSettled := settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
+	if billingPlan == nil {
+		computed := planTaskTerminalBilling(adaptor, task, taskResult)
+		billingPlan = &computed
+	}
+	billingSettled := billingPlan.apply(ctx, task)
 	if task.Status == model.TaskStatusFailure && !billingSettled && task.Quota != 0 {
 		RefundTaskQuota(ctx, task, task.FailReason)
 	}
@@ -772,43 +792,101 @@ func truncateBase64(s string) string {
 //
 // 表达式求值失败会保留预扣额度，因此也视为已接管，避免错误全退。
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) bool {
+	plan := planTaskTerminalBilling(adaptor, task, taskResult)
+	return plan.apply(ctx, task)
+}
+
+type taskTerminalBillingPlan struct {
+	quota         *int
+	reason        *common.Message
+	clamp         *common.QuotaClamp
+	usageFacts    map[string]any
+	matchedTier   string
+	retainedError error
+	perCall       bool
+}
+
+// planTaskTerminalBilling computes the outcome before the terminal database
+// transition. Apart from the local parsed result, it changes no state and
+// moves no funds. A missing or invalid provider fact keeps the prior quote.
+func planTaskTerminalBilling(adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) taskTerminalBillingPlan {
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.TieredSnapshot != nil {
-		// 用量表达式结算只适用于成功任务；失败任务由调用方全额退款。
+		// Tiered completion expressions apply to successful tasks. The
+		// caller refunds failed tasks when no usage pricing took over.
 		if task.Status == model.TaskStatusFailure {
-			return false
+			return taskTerminalBillingPlan{}
 		}
 		result, usageFacts, err := EvaluateTaskCompletionUsage(bc.TieredSnapshot, taskResult.UsageFacts)
 		if err != nil {
-			logger.LogWarn(ctx, common.LogText("task %s expression settlement failed, keeping the pre-consumed quota: %v", task.TaskID, err))
-			return true
+			return taskTerminalBillingPlan{retainedError: err}
 		}
-		if result.Clamp != nil {
-			logger.LogWarn(ctx, common.LogText("task %s expression settlement quota was clamped: %+v", task.TaskID, result.Clamp))
+		return taskTerminalBillingPlan{
+			quota: new(result.ActualQuotaAfterGroup), reason: common.NewMessage("Settled by the task usage expression"),
+			clamp: result.Clamp, usageFacts: usageFacts, matchedTier: result.MatchedTier,
 		}
-		bc.TieredSnapshot.UsageFacts = usageFacts
-		bc.TieredSnapshot.EstimatedTier = result.MatchedTier
-		RecalculateTaskQuota(ctx, task, result.ActualQuotaAfterGroup, common.NewMessage("Settled by the task usage expression"), result.Clamp)
-		return true
 	}
-	// 按次计费的成功任务保持预扣；失败任务由调用方全额退款。
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
-		logger.LogInfo(ctx, common.LogText("task %s is billed per request, skipping difference settlement", task.TaskID))
-		return false
+		return taskTerminalBillingPlan{perCall: true}
 	}
-	// 优先让 adaptor 决定最终额度。
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, common.NewMessage("Adjusted by the channel adaptor"))
-		return true
+		return taskTerminalBillingPlan{quota: new(actualQuota), reason: common.NewMessage("Adjusted by the channel adaptor")}
 	}
-	// 回退到 token 重算。
 	tokens := taskResult.TotalTokens
 	if tokens == 0 && taskResult.CompletionTokens > 0 {
 		tokens = taskResult.CompletionTokens
 	}
-	if tokens > 0 {
-		return RecalculateTaskQuotaByTokens(ctx, task, tokens)
+	if quota, reason, clamp, ok := calculateTaskQuotaByTokens(task, tokens); ok {
+		return taskTerminalBillingPlan{quota: new(quota), reason: reason, clamp: clamp}
 	}
-	return false
+	return taskTerminalBillingPlan{}
+}
+
+func (p taskTerminalBillingPlan) apply(ctx context.Context, task *model.Task) bool {
+	if p.retainedError != nil {
+		logger.LogWarn(ctx, common.LogText("task %s expression settlement failed, keeping the pre-consumed quota: %v", task.TaskID, p.retainedError))
+		return true
+	}
+	if p.perCall {
+		logger.LogInfo(ctx, common.LogText("task %s is billed per request, skipping difference settlement", task.TaskID))
+		return false
+	}
+	if p.quota == nil {
+		return false
+	}
+	if p.usageFacts != nil {
+		if p.clamp != nil {
+			logger.LogWarn(ctx, common.LogText("task %s expression settlement quota was clamped: %+v", task.TaskID, p.clamp))
+		}
+		task.PrivateData.BillingContext.TieredSnapshot.UsageFacts = p.usageFacts
+		task.PrivateData.BillingContext.TieredSnapshot.EstimatedTier = p.matchedTier
+	}
+	RecalculateTaskQuota(ctx, task, *p.quota, p.reason, p.clamp)
+	return true
+}
+
+func updateTaskTerminalStatus(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo, from model.TaskStatus) (bool, *taskTerminalBillingPlan, error) {
+	if !task.PrivateData.ArcaBudgetTracked {
+		won, err := task.UpdateWithStatus(from)
+		return won, nil, err
+	}
+
+	plan := planTaskTerminalBilling(adaptor, task, result)
+	var won bool
+	var err error
+	switch {
+	case plan.quota != nil:
+		won, err = task.UpdateWithStatusAndArcaBudget(ctx, from, plan.quota)
+	case task.Status == model.TaskStatusFailure && plan.retainedError == nil:
+		// The native pricing decision calls for a full refund. The
+		// organization ledger records that decision in the status CAS.
+		won, err = task.UpdateWithStatusAndArcaBudget(ctx, from, nil)
+	case task.Status == model.TaskStatusSuccess && plan.perCall:
+		won, err = task.UpdateWithStatusAndArcaBudget(ctx, from, &task.Quota)
+	default:
+		// The available evidence does not establish a different charge.
+		won, err = task.UpdateWithStatus(from)
+	}
+	return won, &plan, err
 }
 
 func classifyPollHTTP(statusCode int) string {
@@ -903,14 +981,15 @@ func failTaskFromPoll(ctx context.Context, adaptor TaskPollingAdaptor, task *mod
 		task.FinishTime = now
 	}
 	task.FailReason = reason
-	won, err := task.UpdateWithStatus(fromStatus)
+	result := relaycommon.FailTaskInfo(reason)
+	won, billingPlan, err := updateTaskTerminalStatus(ctx, adaptor, task, result, fromStatus)
 	if err != nil {
 		return err
 	}
 	if !won {
 		return nil
 	}
-	finalizeTerminalTask(ctx, adaptor, task, relaycommon.FailTaskInfo(reason))
+	finalizeTerminalTask(ctx, adaptor, task, result, billingPlan)
 	return nil
 }
 

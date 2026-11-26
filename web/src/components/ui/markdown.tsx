@@ -31,6 +31,8 @@ interface MarkdownProps {
   breaks?: boolean
   children: string
   className?: string
+  /** Discussion content can be authored by another user. */
+  untrusted?: boolean
 }
 
 const markdownOptions = {
@@ -720,6 +722,15 @@ const markdownParser = new Marked({
 
 markdownParser.use(...markdownExtensions)
 
+// Keep raw HTML and external images out of the browser parser for content
+// posted by other users. Trusted docs and announcements retain rich rendering.
+const discussionMarkdownParser = new Marked(markdownOptions).use({
+  renderer: {
+    html: () => '',
+    image: ({ text }) => escapeHtml(text),
+  },
+})
+
 function addExternalLinkAttributes(html: string, baseUrl?: string): string {
   if (typeof window === 'undefined') {
     return html
@@ -751,21 +762,50 @@ function addExternalLinkAttributes(html: string, baseUrl?: string): string {
 function renderMarkdown(
   markdown: string,
   breaks = false,
-  baseUrl?: string
+  baseUrl?: string,
+  untrusted = false
 ): string {
-  const parsedHtml = markdownParser.parse(markdown, {
+  const parser = untrusted ? discussionMarkdownParser : markdownParser
+  const parsedHtml = parser.parse(markdown, {
     ...markdownOptions,
     breaks,
   })
-  const html = DOMPurify.sanitize(parsedHtml, sanitizeOptions)
+  const html = DOMPurify.sanitize(
+    parsedHtml,
+    untrusted
+      ? {
+          USE_PROFILES: { html: true },
+          FORBID_ATTR: ['style', 'class', 'id'],
+          FORBID_TAGS: [
+            'img',
+            'form',
+            'style',
+            'video',
+            'audio',
+            'source',
+            'iframe',
+            'input',
+            'button',
+            'textarea',
+            'select',
+          ],
+        }
+      : sanitizeOptions
+  )
 
   return addExternalLinkAttributes(html, baseUrl)
 }
 
 export function Markdown(props: MarkdownProps) {
   const html = useMemo(
-    () => renderMarkdown(props.children, props.breaks, props.baseUrl),
-    [props.breaks, props.children, props.baseUrl]
+    () =>
+      renderMarkdown(
+        props.children,
+        props.breaks,
+        props.baseUrl,
+        props.untrusted
+      ),
+    [props.breaks, props.children, props.baseUrl, props.untrusted]
   )
 
   return (

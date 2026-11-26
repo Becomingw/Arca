@@ -344,6 +344,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				if apiErr = service.PrepareTieredBillingForSelectedGroup(c, info); apiErr != nil {
 					return apiErr
 				}
+				if apiErr = RefreshArcaSelectedGroup(c, info); apiErr != nil {
+					return apiErr
+				}
 			}
 			info.RetryIndex = retry.GetRetry()
 			policy.BeginAttempt(channel, info.UsingGroup)
@@ -554,6 +557,13 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				state.terminal = terminalOf(incoming)
 				ConsumeResponsesQuota(c, info, accumulator.Finish())
+				completed := event.Type == "response.completed" ||
+					(event.Type == "response.done" && info.StreamStatus.ResponseOutcome() == "completed")
+				if completed && stopErr == nil && !cancelled && !info.StreamStatus.HasErrors() && c.GetInt("token_id") > 0 {
+					if err := appmodel.RecordArcaActivity(c.Request.Context(), info.UserId, started.Unix()); err != nil {
+						common.SysError(common.LogText("record Arca activity: %T", err))
+					}
+				}
 				return nil
 			}
 			if stopErr == nil {
@@ -1065,6 +1075,9 @@ func buildResponsesWSErrorPayload(eventID, streamID string, apiErr *types.NewAPI
 // pinned to a channel: the check is stricter there on purpose, because a
 // persistent connection keeps serving the model after the pin was resolved.
 func checkResponsesWSModelAccess(c *gin.Context, modelName string) *types.NewAPIError {
+	if err := service.CheckArcaRelayEntitlement(c, modelName); err != nil {
+		return err
+	}
 	if !common.GetContextKeyBool(c, appconstant.ContextKeyTokenModelLimitEnabled) {
 		return nil
 	}

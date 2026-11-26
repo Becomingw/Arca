@@ -45,6 +45,9 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   console: {
     enabled: true,
     detail: true,
+    workspace: true,
+    feedback: true,
+    team_activity: true,
     token: true,
     log: true,
     audit: true,
@@ -65,6 +68,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     user: true,
     setting: true,
     subscription: true,
+    entitlements: true,
   },
 }
 
@@ -102,6 +106,9 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/dashboard/overview': { section: 'console', module: 'detail' },
   '/dashboard/models': { section: 'console', module: 'detail' },
   '/dashboard/users': { section: 'console', module: 'detail' },
+  '/workspace': { section: 'console', module: 'workspace' },
+  '/feedback': { section: 'console', module: 'feedback' },
+  '/team-activity': { section: 'console', module: 'team_activity' },
   '/keys': { section: 'console', module: 'token' },
   '/usage-logs': { section: 'console', module: 'log' },
   '/usage-logs/common': { section: 'console', module: 'log' },
@@ -111,6 +118,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/wallet': { section: 'personal', module: 'topup' },
   '/profile': { section: 'personal', module: 'personal' },
   '/security': { section: 'personal', module: 'security' },
+  '/entitlements': { section: 'admin', module: 'entitlements' },
   '/channels': { section: 'admin', module: 'channel' },
   '/models': { section: 'admin', module: 'models' },
   '/models/metadata': { section: 'admin', module: 'models' },

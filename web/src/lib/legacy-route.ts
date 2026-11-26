@@ -34,6 +34,17 @@ const legacyConsoleRoutes: Record<string, string> = {
   '/console/task': '/usage-logs/task',
 }
 
+const arcaWorkspaceRoutes = new Map([
+  ['overview', '/workspace'],
+  ['models', '/workspace'],
+  ['keys', '/keys'],
+  ['feedback', '/feedback'],
+  ['activity', '/team-activity'],
+  ['profile', '/profile'],
+  ['entitlements', '/entitlements'],
+  ['agent', '/security'],
+])
+
 const legacySettingsTabs: Record<string, string> = {
   operation: '/system-settings/operations/behavior',
   dashboard: '/system-settings/content/dashboard',
@@ -72,6 +83,23 @@ export function resolveLegacyRoute(rawHref: string): string | null {
   }
 
   const pathname = normalizeLegacyPath(source.pathname)
+  if (pathname === '/arca' || pathname === '/arca/index.html') {
+    const [section, topic, extra] = source.hash.slice(1).split('/')
+    const target = new URL(
+      arcaWorkspaceRoutes.get(section) ?? '/workspace',
+      legacyOrigin
+    )
+    target.search = source.search
+    if (
+      section === 'feedback' &&
+      topic &&
+      !extra &&
+      /^[a-z0-9-]{1,64}$/i.test(topic)
+    ) {
+      target.searchParams.set('topic', topic)
+    }
+    return `${target.pathname}${target.search}`
+  }
   if (pathname === '/login') {
     return buildTargetHref('/sign-in', source)
   }

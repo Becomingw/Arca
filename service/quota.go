@@ -451,7 +451,7 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 			}
 			relayInfo.SubscriptionPostDelta += delta
 		}
-	} else {
+	} else if relayInfo.BillingSource != BillingSourceOrganization {
 		// Wallet
 		if quota > 0 {
 			err = model.DecreaseUserQuota(relayInfo.UserId, quota, false)
@@ -476,10 +476,8 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 		result.TokenApplied = true
 	}
 
-	if sendEmail {
-		if (quota + preConsumedQuota) != 0 {
-			checkAndSendQuotaNotify(relayInfo, quota, preConsumedQuota)
-		}
+	if sendEmail && relayInfo.BillingSource != BillingSourceOrganization && (quota+preConsumedQuota) != 0 {
+		checkAndSendQuotaNotify(relayInfo, quota, preConsumedQuota)
 	}
 
 	return result, nil
