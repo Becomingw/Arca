@@ -22,6 +22,8 @@ import type { TimeGranularity } from '@/lib/time'
 // Quota & Usage Data Types
 // ============================================================================
 
+export type DashboardUsageScope = 'self' | 'site'
+
 export interface DashboardUsageSummary {
   total_tokens: number
   request_count: number

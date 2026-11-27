@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Activity, BarChart3 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -24,9 +25,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useUsageSummary } from '@/features/dashboard/hooks/use-usage-summary'
 import { toIntlLocale } from '@/i18n/languages'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatCompactNumber, formatQuotaUnits } from '@/lib/format'
+import { formatCompactNumber, formatNumber } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 
 import { arcaAvatarUrl, useArcaProfile } from '../arca-profile-api'
@@ -46,6 +48,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const { data: arcaProfile } = useArcaProfile()
+  const usageSummary = useUsageSummary('self')
 
   if (loading) {
     return (
@@ -90,15 +93,19 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const roleLabel = getRoleLabel(profile.role)
   const stats: {
     label: string
-    value: string
+    value: ReactNode
     description: string
     icon: typeof Activity
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Total Usage'),
-      value: formatQuotaUnits(profile.used_quota),
-      description: t('Total consumed quota'),
+      label: t('Total Tokens'),
+      value: usageSummary.isLoading ? (
+        <Skeleton className='h-6 w-20' />
+      ) : (
+        formatNumber(usageSummary.data?.total_tokens, locale)
+      ),
+      description: t('All recorded tokens'),
       icon: BarChart3,
       tone: 'info',
     },

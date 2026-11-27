@@ -58,11 +58,11 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { getDashboardUsageSummary } from '../../api'
 import {
   useApiInfo,
   useDashboardContentVisibility,
 } from '../../hooks/use-status-data'
+import { useUsageSummary } from '../../hooks/use-usage-summary'
 import { AnnouncementsPanel } from './announcements-panel'
 import { ApiInfoPanel } from './api-info-panel'
 import { FAQPanel } from './faq-panel'
@@ -426,17 +426,13 @@ export function OverviewDashboard() {
     boolean | null
   >(() => getSavedSetupGuideExpanded())
 
-  const usageSummary = useQuery({
-    queryKey: ['dashboard', 'overview', 'usage-summary', user?.id],
-    queryFn: async ({ signal }) =>
-      requireServerSuccess(await getDashboardUsageSummary(signal)).data,
-    enabled: Boolean(user?.id),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  })
-  const requestCount =
-    usageSummary.data?.request_count ?? user?.request_count ?? 0
   const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
+  const scope = isAdmin ? 'site' : 'self'
+  const usageSummary = useUsageSummary(scope)
+  const personalRequestCount =
+    (scope === 'self' ? usageSummary.data?.request_count : undefined) ??
+    user?.request_count ??
+    0
 
   const apiKeysQuery = useQuery({
     queryKey: ['dashboard', 'overview', 'api-keys'],
@@ -475,10 +471,10 @@ export function OverviewDashboard() {
         description: t('Verify routing with Playground or your client'),
         to: '/playground',
         icon: TerminalSquare,
-        completed: requestCount > 0,
+        completed: personalRequestCount > 0,
       },
     ],
-    [preferredKey, requestCount, t]
+    [preferredKey, personalRequestCount, t]
   )
 
   const quickActions = useMemo<QuickAction[]>(
@@ -728,7 +724,8 @@ export function OverviewDashboard() {
           )}
 
           <SummaryCards
-            userId={user?.id}
+            scope={scope}
+            userId={usageSummary.isEnabled ? user?.id : undefined}
             summary={usageSummary.data}
             summaryLoading={usageSummary.isPending}
             summaryError={usageSummary.isError}

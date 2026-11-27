@@ -28,6 +28,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -87,6 +88,20 @@ beforeEach(() => {
         }
       case '/api/data/self/summary':
         return { data: { success: true, data: lifetimeUsage } }
+      case '/api/data/':
+        return {
+          data: {
+            success: true,
+            data: [{ created_at: 1, quota: 0, token_used: 512 }],
+          },
+        }
+      case '/api/data/summary':
+        return {
+          data: {
+            success: true,
+            data: { total_tokens: 987_654, request_count: 314 },
+          },
+        }
       default:
         throw new Error(`Unexpected dashboard request: ${url}`)
     }
@@ -122,7 +137,7 @@ describe('overview setup guide', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(
       screen.getAllByRole('heading').map((heading) => heading.textContent)
-    ).toEqual(['Overview', 'Usage at a glance'])
+    ).toEqual(['Overview', 'Your usage'])
     expect(screen.queryByText('Setup guide complete')).not.toBeInTheDocument()
     expect(screen.queryByText('Setup progress: 2/2')).not.toBeInTheDocument()
     for (const name of ['API Keys', 'Channels', 'Usage Logs', 'Pricing']) {
@@ -253,5 +268,29 @@ describe('overview usage', () => {
     expect(await screen.findByText('142,678')).toBeVisible()
     expect(await screen.findByText('237')).toBeVisible()
     expect(await screen.findByText('42')).toBeVisible()
+  })
+})
+
+describe('administrator overview usage', () => {
+  it('shows site totals and recent site tokens without completing the personal setup guide', async () => {
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'administrator',
+      role: ROLE.ADMIN,
+      status: 1,
+      request_count: 0,
+    })
+    await renderOverview()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sitewide usage' })
+    ).toBeVisible()
+    expect(await screen.findByText('987,654')).toBeVisible()
+    expect(await screen.findByText('512')).toBeVisible()
+    expect(await screen.findByText('314')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Hide setup guide' })
+    ).toBeVisible()
+    expect(screen.queryByText('142,678')).not.toBeInTheDocument()
   })
 })

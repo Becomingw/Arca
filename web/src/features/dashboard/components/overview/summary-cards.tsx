@@ -24,6 +24,7 @@ import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import type {
+  DashboardUsageScope,
   DashboardUsageSummary,
   QuotaDataItem,
 } from '@/features/dashboard/types'
@@ -36,6 +37,7 @@ import { StatCard } from '../ui/stat-card'
 const SUMMARY_SPARKLINE_BUCKETS = 12
 
 interface SummaryCardsProps {
+  scope: DashboardUsageScope
   userId?: number
   summary?: DashboardUsageSummary
   summaryLoading: boolean
@@ -84,7 +86,13 @@ export function SummaryCards(props: SummaryCardsProps) {
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const headingId = useId()
   const usageTrendQuery = useQuery({
-    queryKey: ['dashboard', 'overview', 'summary-sparklines', props.userId],
+    queryKey: [
+      'dashboard',
+      'overview',
+      'summary-sparklines',
+      props.scope,
+      props.userId,
+    ],
     queryFn: async ({ signal }) => {
       const end = Math.floor(Date.now() / 1000)
       // Quota data is stored by the start of each UTC hour.
@@ -92,7 +100,7 @@ export function SummaryCards(props: SummaryCardsProps) {
       const result = requireServerSuccess(
         await getUserQuotaDates(
           { start_timestamp: start, end_timestamp: end, default_time: 'hour' },
-          false,
+          props.scope === 'site',
           signal
         )
       )
@@ -138,7 +146,7 @@ export function SummaryCards(props: SummaryCardsProps) {
         id={headingId}
         className='text-base font-semibold tracking-tight sm:text-lg'
       >
-        {t('Usage at a glance')}
+        {props.scope === 'site' ? t('Sitewide usage') : t('Your usage')}
       </h3>
       <StaggerContainer className='grid grid-cols-1 gap-2 min-[360px]:grid-cols-3 sm:gap-4'>
         {items.map((it) => (

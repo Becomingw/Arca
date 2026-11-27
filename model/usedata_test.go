@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-func TestUserQuotaSummary(t *testing.T) {
+func TestQuotaSummaries(t *testing.T) {
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(dialect, func(t *testing.T) {
 			var driver gorm.Dialector
@@ -56,6 +56,10 @@ func TestUserQuotaSummary(t *testing.T) {
 			require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
 			t.Logf("database version: %s", version)
 
+			all, err := GetAllQuotaSummary()
+			require.NoError(t, err)
+			assert.Equal(t, QuotaSummary{}, all)
+
 			owner := User{Username: "history-owner", AffCode: "owner", RequestCount: 10833, UsedQuota: 937}
 			other := User{Username: "other-member", AffCode: "other", RequestCount: 1}
 			empty := User{Username: "no-history", AffCode: "empty"}
@@ -70,11 +74,15 @@ func TestUserQuotaSummary(t *testing.T) {
 
 			summary, err := GetUserQuotaSummary(owner.Id)
 			require.NoError(t, err)
-			assert.Equal(t, UserQuotaSummary{TotalTokens: 3_000_003_868, RequestCount: 10833}, summary)
+			assert.Equal(t, QuotaSummary{TotalTokens: 3_000_003_868, RequestCount: 10833}, summary)
+
+			all, err = GetAllQuotaSummary()
+			require.NoError(t, err)
+			assert.Equal(t, QuotaSummary{TotalTokens: 3_000_004_368, RequestCount: 10834}, all)
 
 			summary, err = GetUserQuotaSummary(empty.Id)
 			require.NoError(t, err)
-			assert.Equal(t, UserQuotaSummary{}, summary)
+			assert.Equal(t, QuotaSummary{}, summary)
 		})
 	}
 }

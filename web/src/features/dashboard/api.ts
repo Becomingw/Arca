@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  DashboardUsageScope,
   DashboardUsageSummary,
   FlowQuotaDataItem,
   QuotaDataItem,
@@ -33,11 +34,16 @@ import type {
 // Quota & Usage Data
 // ----------------------------------------------------------------------------
 
-export async function getDashboardUsageSummary(signal?: AbortSignal) {
+export async function getDashboardUsageSummary(
+  scope: DashboardUsageScope,
+  signal?: AbortSignal
+) {
+  const endpoint =
+    scope === 'site' ? '/api/data/summary' : '/api/data/self/summary'
   const res = await api.get<{
     success: boolean
     data: DashboardUsageSummary
-  }>('/api/data/self/summary', { signal })
+  }>(endpoint, { signal })
   return res.data
 }
 
@@ -53,7 +59,7 @@ export async function getUserQuotaDates(
   isAdmin = false,
   signal?: AbortSignal
 ) {
-  const endpoint = isAdmin ? '/api/data' : '/api/data/self'
+  const endpoint = isAdmin ? '/api/data/' : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     endpoint,
     { params, signal }
