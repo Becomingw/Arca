@@ -425,7 +425,7 @@ func TestGapsFetchModelsPreviewOfAPluginChannel(t *testing.T) {
 	})
 }
 
-func TestGapsProviderTestEndpoint(t *testing.T) {
+func TestRoutedChannelTestEndpoint(t *testing.T) {
 	routes := func(routes ...dto.AdvancedCustomRoute) jsplugin.Meta { return jsplugin.Meta{Relay: routes} }
 	route := func(path string, models ...string) dto.AdvancedCustomRoute {
 		return dto.AdvancedCustomRoute{IncomingPath: path, UpstreamPath: "/upstream", Models: models}
@@ -439,15 +439,22 @@ func TestGapsProviderTestEndpoint(t *testing.T) {
 		wantOK       bool
 	}{
 		{"the default endpoint is served", routes(route("/v1/chat/completions"), route("/v1/messages")), "/v1/chat/completions", "m", "", false},
+		{"only OpenAI Responses serve the selected model", routes(route("/v1/chat/completions", "other"), route("/v1/responses", "gpt-6.1-terra"), route("/v1/models")), "/v1/chat/completions", "gpt-6.1-terra", constant.EndpointTypeOpenAIResponse, true},
 		{"only Anthropic Messages is served", routes(route("/v1/messages")), "/v1/chat/completions", "claude-x", constant.EndpointTypeAnthropic, true},
 		{"a Gemini route with the model in its path", routes(route("/v1beta/models/{model}:generateContent")), "/v1/chat/completions", "gemini-x", constant.EndpointTypeGemini, true},
 		{"the default endpoint serves other models only", routes(route("/v1/chat/completions", "other"), route("/v1/messages")), "/v1/chat/completions", "claude-x", constant.EndpointTypeAnthropic, true},
 		{"no test endpoint is served", routes(route("/v1/videos")), "/v1/chat/completions", "m", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			endpoint, ok := providerTestEndpoint(tc.meta, tc.requestPath, tc.model)
-			assert.Equal(t, tc.wantOK, ok)
-			assert.Equal(t, tc.wantEndpoint, endpoint)
+			advancedConfig := &dto.AdvancedCustomConfig{Routes: tc.meta.Relay}
+			for _, matchRoute := range []func(string, string) (dto.AdvancedCustomRoute, bool){
+				tc.meta.RelayRoute,
+				advancedConfig.MatchPathForModel,
+			} {
+				endpoint, ok := fallbackChannelTestEndpoint(matchRoute, tc.requestPath, tc.model)
+				assert.Equal(t, tc.wantOK, ok)
+				assert.Equal(t, tc.wantEndpoint, endpoint)
+			}
 		})
 	}
 }

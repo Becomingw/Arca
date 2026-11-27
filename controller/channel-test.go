@@ -20,7 +20,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
-	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -54,9 +53,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) s
 	return normalized
 }
 
-// providerTestEndpoints are the endpoints a task plugin channel test tries when
-// its plugin's relay routes do not serve the default one, in this order.
-var providerTestEndpoints = []constant.EndpointType{
+// routedChannelTestEndpoints are tried in order when a channel's declared
+// routes do not serve the inferred test endpoint for the selected model.
+var routedChannelTestEndpoints = []constant.EndpointType{
 	constant.EndpointTypeOpenAI,
 	constant.EndpointTypeOpenAIResponse,
 	constant.EndpointTypeAnthropic,
@@ -66,16 +65,17 @@ var providerTestEndpoints = []constant.EndpointType{
 	constant.EndpointTypeImageGeneration,
 }
 
-// providerTestEndpoint returns the endpoint a task plugin channel test uses
-// for model instead of requestPath, which meta's relay routes do not serve.
-// ok is false when they serve requestPath or none of the test endpoints.
-func providerTestEndpoint(meta jsplugin.Meta, requestPath, model string) (endpoint constant.EndpointType, ok bool) {
-	if _, served := meta.RelayRoute(requestPath, model); served {
+// fallbackChannelTestEndpoint preserves the inferred path if it is already served.
+func fallbackChannelTestEndpoint(matchRoute func(string, string) (dto.AdvancedCustomRoute, bool), requestPath, model string) (constant.EndpointType, bool) {
+	if matchRoute == nil {
 		return "", false
 	}
-	for _, endpoint := range providerTestEndpoints {
+	if _, served := matchRoute(requestPath, model); served {
+		return "", false
+	}
+	for _, endpoint := range routedChannelTestEndpoints {
 		info, _ := common.GetDefaultEndpointInfo(endpoint)
-		if _, served := meta.RelayRoute(strings.ReplaceAll(info.Path, "{model}", model), model); served {
+		if _, served := matchRoute(strings.ReplaceAll(info.Path, "{model}", model), model); served {
 			return endpoint, true
 		}
 	}
@@ -178,10 +178,15 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 
 	}
-	// A task plugin channel tests on an endpoint its relay routes serve for the
-	// model: the default one when they serve it, else the first they serve.
-	if providerChannel && endpointType == "" {
-		if endpoint, ok := providerTestEndpoint(plugin.Meta, requestPath, testModel); ok {
+	if endpointType == "" {
+		var matchRoute func(string, string) (dto.AdvancedCustomRoute, bool)
+		switch {
+		case providerChannel:
+			matchRoute = plugin.Meta.RelayRoute
+		case channel.Type == constant.ChannelTypeAdvancedCustom:
+			matchRoute = channel.GetOtherSettings().AdvancedCustom.MatchPathForModel
+		}
+		if endpoint, ok := fallbackChannelTestEndpoint(matchRoute, requestPath, testModel); ok {
 			endpointType = string(endpoint)
 			endpointInfo, _ := common.GetDefaultEndpointInfo(endpoint)
 			requestPath = strings.ReplaceAll(endpointInfo.Path, "{model}", testModel)
