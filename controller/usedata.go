@@ -60,6 +60,15 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	})
 }
 
+func GetUserQuotaSummary(c *gin.Context) {
+	summary, err := model.GetUserQuotaSummary(c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
+}
+
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)

@@ -138,6 +138,22 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     expect(data).toEqual(original)
   })
 
+  test('keeps populated model buckets older than the padding window', () => {
+    const rows = unorderedUsage(scenario.start, scenario.interval)
+    const result = processChartData([rows[0], rows[4]], scenario.granularity)
+
+    for (const key of ['spec_line', 'spec_area', 'spec_model_line'] as const) {
+      const values: Array<{ Time: string; rawQuota: number; Count: number }> =
+        result[key].data[0].values
+      expect(values.map((row) => row.Time)).toEqual(scenario.labels)
+      expect(
+        values.map((row) =>
+          key === 'spec_model_line' ? row.Count : row.rawQuota / 500000
+        )
+      ).toEqual([1, 0, 0, 0, 0, 0, 0, 8])
+    }
+  })
+
   test('keeps the existing seven padded model buckets in chronological order', () => {
     const data = [unorderedUsage(scenario.start, scenario.interval)[0]]
     const result = processChartData(data, scenario.granularity)

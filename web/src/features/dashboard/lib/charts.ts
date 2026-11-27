@@ -250,9 +250,6 @@ export function processChartData(
   })
 
   const allModels = [...modelTotalsMap.keys()]
-  const sortedTimes = [...timeTimestamps]
-    .sort((a, b) => a[1] - b[1])
-    .map(([time]) => time)
   const sortedModels = [...allModels].sort()
   const modelColorDomain = [...new Set([...sortedModels, otherLabel])]
   const modelColorRange = getDashboardChartColors(modelColorDomain.length)
@@ -265,10 +262,8 @@ export function processChartData(
     range: modelColorRange,
   }
 
-  // Pad time points if too few (default 7 points)
-  const MAX_TREND_POINTS = MAX_CHART_TREND_POINTS
-  const fillTimePoints = (times: string[]) => {
-    if (times.length >= MAX_TREND_POINTS) return times
+  // Fill missing recent buckets without dropping any recorded bucket.
+  if (timeTimestamps.size < MAX_CHART_TREND_POINTS) {
     const lastTime = Math.max(
       ...data.map((item) => Number(item.created_at) || 0)
     )
@@ -278,15 +273,17 @@ export function processChartData(
     } else if (timeGranularity === 'day') {
       intervalSec = 86400
     }
-    const padded = Array.from({ length: MAX_TREND_POINTS }, (_, i) =>
-      formatChartTime(
-        lastTime - (MAX_TREND_POINTS - 1 - i) * intervalSec,
-        timeGranularity
-      )
-    )
-    return padded
+    for (let offset = 1; offset < MAX_CHART_TREND_POINTS; offset++) {
+      const timestamp = lastTime - offset * intervalSec
+      const time = formatChartTime(timestamp, timeGranularity)
+      if (!timeTimestamps.has(time)) {
+        timeTimestamps.set(time, timestamp)
+      }
+    }
   }
-  const chartTimes = fillTimePoints(sortedTimes)
+  const chartTimes = [...timeTimestamps]
+    .sort((a, b) => a[1] - b[1])
+    .map(([time]) => time)
 
   const totalTimes = [...modelTotalsMap.values()].reduce(
     (sum, x) => sum + (Number(x.count) || 0),

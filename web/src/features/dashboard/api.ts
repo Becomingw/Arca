@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  DashboardUsageSummary,
   FlowQuotaDataItem,
   QuotaDataItem,
   UptimeGroupResult,
@@ -32,6 +33,14 @@ import type {
 // Quota & Usage Data
 // ----------------------------------------------------------------------------
 
+export async function getDashboardUsageSummary(signal?: AbortSignal) {
+  const res = await api.get<{
+    success: boolean
+    data: DashboardUsageSummary
+  }>('/api/data/self/summary', { signal })
+  return res.data
+}
+
 // Get user quota data within a time range
 // Admin users get all users' data by default.
 export async function getUserQuotaDates(
@@ -41,12 +50,13 @@ export async function getUserQuotaDates(
     default_time?: string
     username?: string
   },
-  isAdmin = false
+  isAdmin = false,
+  signal?: AbortSignal
 ) {
   const endpoint = isAdmin ? '/api/data' : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     endpoint,
-    { params }
+    { params, signal }
   )
   return res.data
 }

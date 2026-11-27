@@ -59,11 +59,13 @@ export function formatCompactNumber(
   value: number | null | undefined,
   locales?: Intl.LocalesArgument
 ): string {
-  if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(locales, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value as number)
+  if (value == null || !Number.isFinite(value)) return '-'
+  const magnitude = Math.abs(value)
+  if (magnitude < 1000) return formatNumber(value, locales)
+
+  const formatter = Intl.NumberFormat(locales, { maximumFractionDigits: 1 })
+  if (magnitude >= 10_000) return `${formatter.format(value / 10_000)}w`
+  return `${formatter.format(value / 1000)}k`
 }
 
 export function formatPercent(value: number | null | undefined): string {

@@ -27,6 +27,21 @@ type QuotaData struct {
 	CacheCreationTokens int64  `json:"cache_creation_tokens" gorm:"default:0"`
 }
 
+type UserQuotaSummary struct {
+	TotalTokens  int64 `json:"total_tokens"`
+	RequestCount int64 `json:"request_count"`
+}
+
+func GetUserQuotaSummary(userID int) (UserQuotaSummary, error) {
+	var summary UserQuotaSummary
+	tokens := DB.Model(&QuotaData{}).Select("COALESCE(SUM(token_used), 0)").Where("user_id = ?", userID)
+	err := DB.Model(&User{}).
+		Select("COALESCE(request_count, 0) AS request_count, (?) AS total_tokens", tokens).
+		Where("id = ?", userID).
+		Take(&summary).Error
+	return summary, err
+}
+
 type QuotaDataLogParams struct {
 	UserID              int
 	Username            string

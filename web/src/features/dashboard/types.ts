@@ -22,6 +22,11 @@ import type { TimeGranularity } from '@/lib/time'
 // Quota & Usage Data Types
 // ============================================================================
 
+export interface DashboardUsageSummary {
+  total_tokens: number
+  request_count: number
+}
+
 export interface QuotaDataItem {
   id?: number
   user_id?: number

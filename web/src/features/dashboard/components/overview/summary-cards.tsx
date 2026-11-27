@@ -23,18 +23,24 @@ import { useTranslation } from 'react-i18next'
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
-import type { QuotaDataItem } from '@/features/dashboard/types'
-import { useStatus } from '@/hooks/use-status'
-import { formatNumber, formatQuotaUnits } from '@/lib/format'
+import type {
+  DashboardUsageSummary,
+  QuotaDataItem,
+} from '@/features/dashboard/types'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
-import { computeTimeRange } from '@/lib/time'
-import { useAuthStore } from '@/stores/auth-store'
 
 import { StatCard } from '../ui/stat-card'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
 
-type SummarySparklineKey = 'usage' | 'requests'
+interface SummaryCardsProps {
+  userId?: number
+  summary?: DashboardUsageSummary
+  summaryLoading: boolean
+  summaryError: boolean
+}
 
 function getBucketIndex(
   timestamp: number,
@@ -51,9 +57,10 @@ function buildSummarySparklines(
   data: QuotaDataItem[],
   start: number,
   end: number
-): Record<SummarySparklineKey, number[]> {
-  const usage = Array.from({ length: SUMMARY_SPARKLINE_BUCKETS }, () => 0)
+) {
+  const tokens = Array.from({ length: SUMMARY_SPARKLINE_BUCKETS }, () => 0)
   const requests = Array.from({ length: SUMMARY_SPARKLINE_BUCKETS }, () => 0)
+  let totalTokens = 0
 
   for (const item of data) {
     const timestamp = Number(item.created_at) || start
@@ -63,89 +70,51 @@ function buildSummarySparklines(
       end,
       SUMMARY_SPARKLINE_BUCKETS
     )
-    usage[index] += Number(item.quota) || 0
-    requests[index] += Number(item.count) || 0
+    const tokenCount = item.token_used ?? 0
+    tokens[index] += tokenCount
+    totalTokens += tokenCount
+    requests[index] += item.count ?? 0
   }
 
-  return {
-    usage,
-    requests,
-  }
+  return { tokens, requests, totalTokens }
 }
 
-function getSummarySparkline(
-  key: string,
-  sparklineData: Record<SummarySparklineKey, number[]>
-): number[] | undefined {
-  if (key === 'usage') return sparklineData.usage
-  if (key === 'requests') return sparklineData.requests
-  return undefined
-}
-
-export function SummaryCards() {
-  const { t } = useTranslation()
+export function SummaryCards(props: SummaryCardsProps) {
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const headingId = useId()
-  const user = useAuthStore((state) => state.auth.user)
-  const { loading } = useStatus()
-
-  const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
-  const usedQuota = Number(user?.used_quota ?? 0)
-  const requestCount = Number(user?.request_count ?? 0)
-
   const usageTrendQuery = useQuery({
-    queryKey: [
-      'dashboard',
-      'overview',
-      'summary-sparklines',
-      summaryTimeRange.start_timestamp,
-      summaryTimeRange.end_timestamp,
-    ],
-    queryFn: async () =>
-      requireServerSuccess(
-        await getUserQuotaDates({
-          start_timestamp: summaryTimeRange.start_timestamp,
-          end_timestamp: summaryTimeRange.end_timestamp,
-          default_time: 'hour',
-        })
-      ),
-    staleTime: 60 * 1000,
+    queryKey: ['dashboard', 'overview', 'summary-sparklines', props.userId],
+    queryFn: async ({ signal }) => {
+      const end = Math.floor(Date.now() / 1000)
+      // Quota data is stored by the start of each UTC hour.
+      const start = end - (end % 3600) - 23 * 3600
+      const result = requireServerSuccess(
+        await getUserQuotaDates(
+          { start_timestamp: start, end_timestamp: end, default_time: 'hour' },
+          false,
+          signal
+        )
+      )
+      return { rows: result.data, start, end }
+    },
+    enabled: Boolean(props.userId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   })
-
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatQuotaUnits(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
-    }
-  }, [requestCount, usedQuota])
-
-  const sparklineData = useMemo(
-    () =>
-      buildSummarySparklines(
-        usageTrendQuery.data?.data ?? [],
-        summaryTimeRange.start_timestamp,
-        summaryTimeRange.end_timestamp
-      ),
-    [
-      summaryTimeRange.end_timestamp,
-      summaryTimeRange.start_timestamp,
-      usageTrendQuery.data?.data,
-    ]
-  )
-
-  const recentUsage = useMemo(
-    () =>
-      (usageTrendQuery.data?.data ?? []).reduce(
-        (total, item) => total + (Number(item.quota) || 0),
-        0
-      ),
-    [usageTrendQuery.data?.data]
-  )
+  const trend = useMemo(() => {
+    const data = usageTrendQuery.data
+    return data && buildSummarySparklines(data.rows, data.start, data.end)
+  }, [usageTrendQuery.data])
 
   const items = useSummaryCardsConfig({
-    ...summaryValues,
-    todayUsageDisplay: formatQuotaUnits(recentUsage),
+    recentTokensDisplay: formatNumber(trend?.totalTokens, locale),
+    totalTokensDisplay: formatNumber(props.summary?.total_tokens, locale),
+    requestCountDisplay: formatNumber(props.summary?.request_count, locale),
   }).map((config, index) => {
     const tones = ['accent-1', 'accent-2', 'accent-3'] as const
+
+    const recent = config.key === 'recentTokens'
 
     return {
       key: config.key,
@@ -154,11 +123,9 @@ export function SummaryCards() {
       desc: config.description,
       icon: config.icon,
       tone: tones[index] ?? 'accent-3',
-      sparkline:
-        config.key === 'todayUsage'
-          ? sparklineData.usage
-          : getSummarySparkline(config.key, sparklineData),
-      sparklineVariant: 'line' as const,
+      sparkline: recent ? trend?.tokens : trend?.requests,
+      loading: recent ? usageTrendQuery.isPending : props.summaryLoading,
+      error: recent ? usageTrendQuery.isError : props.summaryError,
     }
   })
 
@@ -185,9 +152,10 @@ export function SummaryCards() {
               description={it.desc}
               icon={it.icon}
               tone={it.tone}
-              sparkline={it.sparkline}
-              sparklineVariant={it.sparklineVariant}
-              loading={loading}
+              sparkline={it.key === 'totalTokens' ? undefined : it.sparkline}
+              sparklineVariant='line'
+              loading={it.loading}
+              error={it.error}
               compactMobile
             />
           </StaggerItem>

@@ -58,6 +58,7 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { getDashboardUsageSummary } from '../../api'
 import {
   useApiInfo,
   useDashboardContentVisibility,
@@ -425,7 +426,16 @@ export function OverviewDashboard() {
     boolean | null
   >(() => getSavedSetupGuideExpanded())
 
-  const requestCount = Number(user?.request_count ?? 0)
+  const usageSummary = useQuery({
+    queryKey: ['dashboard', 'overview', 'usage-summary', user?.id],
+    queryFn: async ({ signal }) =>
+      requireServerSuccess(await getDashboardUsageSummary(signal)).data,
+    enabled: Boolean(user?.id),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  })
+  const requestCount =
+    usageSummary.data?.request_count ?? user?.request_count ?? 0
   const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
 
   const apiKeysQuery = useQuery({
@@ -717,7 +727,12 @@ export function OverviewDashboard() {
             </CardStaggerContainer>
           )}
 
-          <SummaryCards />
+          <SummaryCards
+            userId={user?.id}
+            summary={usageSummary.data}
+            summaryLoading={usageSummary.isPending}
+            summaryError={usageSummary.isError}
+          />
 
           {showContentPanels && (
             <CardStaggerContainer

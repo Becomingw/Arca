@@ -36,6 +36,7 @@ import { OverviewDashboard } from '../overview-dashboard'
 const storageKey = 'dashboard_overview_setup_guide_expanded'
 let client: QueryClient
 let keyLookupError: Error | null
+let lifetimeUsage: { total_tokens: number; request_count: number }
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -51,6 +52,7 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false } },
   })
   keyLookupError = null
+  lifetimeUsage = { total_tokens: 142_678, request_count: 1 }
   vi.spyOn(api, 'get').mockImplementation(async (url) => {
     switch (url) {
       case '/api/token/?p=1&size=10':
@@ -77,7 +79,14 @@ beforeEach(() => {
       case '/api/user/models':
         return { data: { success: true, data: ['gpt-4o-mini'] } }
       case '/api/data/self':
-        return { data: { success: true, data: [] } }
+        return {
+          data: {
+            success: true,
+            data: [{ created_at: 1, quota: 0, token_used: 237 }],
+          },
+        }
+      case '/api/data/self/summary':
+        return { data: { success: true, data: lifetimeUsage } }
       default:
         throw new Error(`Unexpected dashboard request: ${url}`)
     }
@@ -178,6 +187,7 @@ describe('overview setup guide', () => {
 
   it('keeps the existing progress banner when an incomplete guide is manually collapsed', async () => {
     const user = userEvent.setup()
+    lifetimeUsage = { total_tokens: 0, request_count: 0 }
     useAuthStore
       .getState()
       .auth.setUser({ id: 1, username: 'new-user', role: 1 })
@@ -200,7 +210,8 @@ describe('overview setup guide', () => {
     ).toBeVisible()
   })
 
-  it('removes the collapsed progress banner when the remaining setup step completes', async () => {
+  it('removes the collapsed progress banner when the latest usage records a request', async () => {
+    lifetimeUsage = { total_tokens: 0, request_count: 0 }
     useAuthStore.getState().auth.setUser({
       id: 1,
       username: 'dashboard-user',
@@ -210,13 +221,9 @@ describe('overview setup guide', () => {
     await renderOverview()
     expect(await screen.findByText('Setup progress: 1/2')).toBeVisible()
 
-    act(() => {
-      useAuthStore.getState().auth.setUser({
-        id: 1,
-        username: 'dashboard-user',
-        role: 1,
-        request_count: 1,
-      })
+    lifetimeUsage = { total_tokens: 142_678, request_count: 1 }
+    await act(async () => {
+      await client.invalidateQueries()
     })
     expect(
       await screen.findByRole('button', { name: 'Setup guide' })
@@ -234,5 +241,17 @@ describe('overview setup guide', () => {
     expect(
       screen.queryByRole('button', { name: 'Setup guide' })
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('overview usage', () => {
+  it('shows lifetime and recent tokens along with the fresh request count', async () => {
+    lifetimeUsage = { total_tokens: 142_678, request_count: 42 }
+    await renderOverview()
+
+    expect(await screen.findByText('Total Tokens')).toBeVisible()
+    expect(await screen.findByText('142,678')).toBeVisible()
+    expect(await screen.findByText('237')).toBeVisible()
+    expect(await screen.findByText('42')).toBeVisible()
   })
 })

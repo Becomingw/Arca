@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
   DEFAULT_DASHBOARD_CHART_PREFERENCES,
-  DEFAULT_TIME_GRANULARITY,
   EMPTY_DASHBOARD_FILTERS,
   TIME_GRANULARITY_STORAGE_KEY,
   TIME_RANGE_PRESETS,
@@ -38,9 +37,10 @@ function isTimeGranularity(value: unknown): value is TimeGranularity {
 }
 
 function getLegacySavedGranularity(): TimeGranularity {
-  if (typeof window === 'undefined') return DEFAULT_TIME_GRANULARITY
   const saved = localStorage.getItem(TIME_GRANULARITY_STORAGE_KEY)
-  return isTimeGranularity(saved) ? saved : DEFAULT_TIME_GRANULARITY
+  return isTimeGranularity(saved)
+    ? saved
+    : DEFAULT_DASHBOARD_CHART_PREFERENCES.defaultTimeGranularity
 }
 
 function isConsumptionDistributionChartType(
